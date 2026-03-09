@@ -1,35 +1,35 @@
-//! # Thread Creation
+//! # 线程创建
 //!
-//! In this exercise, you will learn how to create threads and pass data between threads.
+//! 在本练习中，你将学习如何创建线程以及在线程间传递数据。
 //!
-//! ## Concepts
-//! - `std::thread::spawn` creates a new thread
-//! - `move` closures capture variable ownership
-//! - `JoinHandle::join()` waits for thread completion and retrieves return value
+//! ## 核心概念
+//! - `std::thread::spawn` 用于创建新线程
+//! - `move` 闭包捕获变量的所有权
+//! - `JoinHandle::join()` 等待线程完成并获取返回值
 //!
-//! ## Advanced Thread Operations
-//! - **Thread sleep**: `thread::sleep` pauses the current thread.
-//! - **Thread‑local storage**: `thread_local!` macro defines static variables unique to each thread.
-//! - **Thread naming**: `Builder::name` assigns a name for debugging.
-//! - **Thread priority**: Set via `thread::Builder` (platform‑dependent).
-//! - **Thread pools**: Libraries like `rayon` manage thread reuse.
-//! - **Thread communication**: Use `std::sync::mpsc` (multi‑producer single‑consumer) or third‑party crates (e.g., `crossbeam`).
-//! - **Shared state**: `Arc<Mutex<T>>` or `Arc<RwLock<T>>` safely share mutable data across threads.
-//! - **Synchronization primitives**: `Barrier` synchronizes multiple threads, `Condvar` implements condition variables.
-//! - **Thread park/unpark**: `thread::park` blocks a thread, `unpark` wakes it, useful for custom scheduling.
-//! - **Get current thread handle**: `thread::current()`.
-//! - **Scoped threads**: `crossbeam::scope` or standard‑library `thread::scope` (Rust 1.63+) allow threads to borrow stack data without `move`.
+//! ## 高级线程操作
+//! - **线程休眠**：`thread::sleep` 暂停当前线程。
+//! - **线程本地存储**：`thread_local!` 宏定义每个线程独有的静态变量。
+//! - **线程命名**：`Builder::name` 为线程分配名称，便于调试。
+//! - **线程优先级**：通过 `thread::Builder` 设置（平台相关）。
+//! - **线程池**：如 `rayon` 等库管理线程复用。
+//! - **线程通信**：使用 `std::sync::mpsc`（多生产者单消费者）或第三方库（如 `crossbeam`）。
+//! - **共享状态**：`Arc<Mutex<T>>` 或 `Arc<RwLock<T>>` 安全地在线程间共享可变数据。
+//! - **同步原语**：`Barrier` 同步多个线程，`Condvar` 实现条件变量。
+//! - **线程阻塞/唤醒**：`thread::park` 阻塞线程，`unpark` 唤醒线程，用于自定义调度。
+//! - **获取当前线程句柄**：`thread::current()`。
+//! - **作用域线程**：`crossbeam::scope` 或标准库的 `thread::scope`（Rust 1.63+）允许线程借用栈数据而无需 `move`。
 //!
-//! Rust statically prevents data races through the ownership system and the `Send` and `Sync` traits.
-//! Types that implement `Send` can be transferred across thread boundaries.
-//! Types that implement `Sync` can be referenced from multiple threads simultaneously.
-//! Most Rust standard types are `Send + Sync`; exceptions include `Rc<T>` (non‑atomic reference counting) and raw pointers.
+//! Rust 通过所有权系统以及 `Send` 和 `Sync` trait 在静态层面防止数据竞争。
+//! 实现了 `Send` 的类型可以在线程间转移。
+//! 实现了 `Sync` 的类型可以被多个线程同时引用。
+//! 大多数 Rust 标准类型都是 `Send + Sync`；例外包括 `Rc<T>`（非原子引用计数）和裸指针。
 //!
-//! ## Exercise Structure
-//! 1. **Basic exercises** (`double_in_thread`, `parallel_sum`) – introduce fundamental thread creation.
-//! 2. **Advanced exercises** (`named_sleeper`, `increment_thread_local`, `scoped_slice_sum`, `handle_panic`) – explore additional thread operations.
-//! Each function includes a `TODO` comment indicating where you need to write code.
-//! Run `cargo test` to check your implementations.
+//! ## 练习结构
+//! 1. **基础练习**（`double_in_thread`、`parallel_sum`）——介绍线程创建的基本概念。
+//! 2. **进阶练习**（`named_sleeper`、`increment_thread_local`、`scoped_slice_sum`、`handle_panic`）——探索更多线程操作。
+//! 每个函数都有一个 `TODO` 注释，指示你需要编写代码的位置。
+//! 运行 `cargo test` 来检查你的实现。
 
 #[allow(unused_imports)]
 use std::cell::RefCell;
@@ -39,22 +39,21 @@ use std::thread;
 use std::time::Duration;
 
 // ============================================================================
-// Example Code: Advanced Thread Patterns
+// 示例代码：高级线程模式
 // ============================================================================
-// The following examples illustrate additional thread‑related concepts that are
-// useful in real‑world Rust concurrent programming.
+// 以下示例说明了在 Rust 并发编程中有用的其他线程相关概念。
 
-/// Example: Handling thread panic.
+/// 示例：处理线程 panic。
 ///
-/// `join()` returns a `Result`. If the thread panics, the `Result` is an `Err`.
-/// This demonstrates how to catch and handle a panic from a spawned thread.
+/// `join()` 返回一个 `Result`。如果线程 panic，`Result` 为 `Err`。
+/// 这演示了如何捕获和处理来自派生线程的 panic。
 ///
 /// ```rust
 /// use std::thread;
 ///
 /// fn panic_handling_example() {
 ///     let handle = thread::spawn(|| {
-///         // Simulate a panic
+///         // 模拟 panic
 ///         panic!("Thread panicked!");
 ///     });
 ///
@@ -65,13 +64,11 @@ use std::time::Duration;
 /// }
 /// ```
 ///
-/// In contrast, the exercises below use `unwrap()` for simplicity, assuming
-/// that the threads never panic.
+/// 相比之下，下面的练习为了简单起见使用 `unwrap()`，假设线程不会 panic。
 
-/// Example: Named thread and custom stack size.
+/// 示例：命名线程和自定义栈大小。
 ///
-/// Using `thread::Builder` you can assign a name to a thread (helpful for
-/// debugging) and set its stack size.
+/// 使用 `thread::Builder` 可以为线程分配名称（有助于调试）并设置其栈大小。
 ///
 /// ```rust
 /// use std::thread;
@@ -91,11 +88,10 @@ use std::time::Duration;
 /// }
 /// ```
 
-/// Example: Scoped threads (Rust 1.63+).
+/// 示例：作用域线程（Rust 1.63+）。
 ///
-/// Scoped threads allow borrowing stack data without moving ownership.
-/// The threads are guaranteed to finish before the scope ends, so references
-/// remain valid.
+/// 作用域线程允许借用栈数据而无需转移所有权。
+/// 线程保证在作用域结束前完成，因此引用保持有效。
 ///
 /// ```rust
 /// use std::thread;
@@ -110,14 +106,14 @@ use std::time::Duration;
 ///         (h1.join().unwrap(), h2.join().unwrap())
 ///     });
 ///
-///     // `a` and `b` are still accessible here.
+///     // `a` 和 `b` 在这里仍然可以访问。
 ///     println!("sum_a = {}, sum_b = {}", sum_a, sum_b);
 /// }
 /// ```
 
-/// Example: Thread‑local storage.
+/// 示例：线程本地存储。
 ///
-/// Each thread gets its own independent copy of a `thread_local!` variable.
+/// 每个线程获得 `thread_local!` 变量的独立副本。
 ///
 /// ```rust
 /// use std::cell::RefCell;
@@ -146,94 +142,128 @@ use std::time::Duration;
 /// ```
 
 // ============================================================================
-// Exercise Functions
+// 练习函数
 // ============================================================================
 
-/// Multiply each element of a vector by 2 in a new thread, returning the result vector.
+/// 在新线程中将向量的每个元素乘以 2，返回结果向量。
 ///
-/// Hint: Use `thread::spawn` and `move` closure.
+/// 提示：使用 `thread::spawn` 和 `move` 闭包。
 #[allow(unused_variables)]
 pub fn double_in_thread(numbers: Vec<i32>) -> Vec<i32> {
-    // TODO: Create a new thread to multiply each element of numbers by 2
-    // Use thread::spawn and move closure
-    // Use join().unwrap() to get result
-    todo!()
+    // TODO: 创建一个新线程，将 numbers 中的每个元素乘以 2
+    // 使用 thread::spawn 和 move 闭包
+    // 使用 join().unwrap() 获取结果
+    thread::spawn(move || numbers.into_iter().map(|x| x * 2).collect())
+        .join()
+        .unwrap()
 }
 
-/// Sum two vectors in parallel, returning a tuple of two sums.
+/// 并行计算两个向量的和，返回两个和的元组。
 ///
-/// Hint: Create two threads for each vector.
+/// 提示：为每个向量创建两个线程。
 #[allow(unused_variables)]
 pub fn parallel_sum(a: Vec<i32>, b: Vec<i32>) -> (i32, i32) {
-    // TODO: Create two threads to sum a and b respectively
-    // Join both threads to get results
-    todo!()
+    // TODO: 创建两个线程分别对 a 和 b 求和
+    // 等待两个线程获取结果
+    // thread::spawn(move || {
+    //     a.into_iter()
+    //         .zip(b)
+    //         .reduce(|(mut acc_a, mut acc_b), (a, b)| {
+    //             acc_a += a;
+    //             acc_b += b;
+    //             (acc_a, acc_b)
+    //         })
+    //         .unwrap()
+    // })
+    // .join()
+    // .unwrap()
+    let th1 = thread::spawn(move || a.iter().sum::<i32>());
+    let th2 = thread::spawn(move || b.iter().sum::<i32>());
+    (th1.join().unwrap(), th2.join().unwrap())
 }
 
 // ============================================================================
-// Advanced Exercise Functions
+// 进阶练习函数
 // ============================================================================
 
-/// Create a named thread that sleeps for the given milliseconds and then returns the input value.
+/// 创建一个命名线程，休眠指定的毫秒数后返回输入值。
 ///
-/// The thread should be named `"sleeper"`. Use `thread::Builder` to set the name.
-/// Inside the thread, call `thread::sleep(Duration::from_millis(ms))` before returning `value`.
+/// 线程应命名为 `"sleeper"`。使用 `thread::Builder` 设置名称。
+/// 在线程内部，先调用 `thread::sleep(Duration::from_millis(ms))`，然后返回 `value`。
 ///
-/// Hint: `thread::sleep` causes the current thread to block; it does not affect other threads.
+/// 提示：`thread::sleep` 使当前线程阻塞；它不会影响其他线程。
 #[allow(unused_variables)]
 pub fn named_sleeper(value: i32, ms: u64) -> i32 {
-    // TODO: Create a thread builder with name "sleeper"
-    // TODO: Spawn a thread that sleeps for `ms` milliseconds and returns `value`
-    // TODO: Join the thread and return the value
-    todo!()
+    // TODO: 创建一个名为 "sleeper" 的线程构建器
+    // TODO: 派生一个线程，休眠 `ms` 毫秒后返回 `value`
+    // TODO: 等待线程完成并返回值
+    thread::Builder::new()
+        .name("sleeper".to_string())
+        .spawn(move || {
+            thread::sleep(Duration::from_micros(ms));
+            value
+        })
+        .unwrap()
+        .join()
+        .unwrap()
 }
 
 thread_local! {
     static THREAD_COUNT: RefCell<usize> = RefCell::new(0);
 }
 
-/// Use thread‑local storage to count how many times each thread calls `increment`.
+/// 使用线程本地存储来统计每个线程调用 `increment` 的次数。
 ///
-/// Define a `thread_local!` static `THREAD_COUNT` of type `RefCell<usize>` initialized to 0.
-/// Each call to `increment` should increase the thread‑local count by 1 and return the new value.
+/// 定义一个 `thread_local!` 静态变量 `THREAD_COUNT`，类型为 `RefCell<usize>`，初始化为 0。
+/// 每次调用 `increment` 应该将线程本地计数加 1 并返回新值。
 ///
-/// Hint: Use `THREAD_COUNT.with(|cell| { ... })` to access the thread‑local variable.
+/// 提示：使用 `THREAD_COUNT.with(|cell| { ... })` 来访问线程本地变量。
 pub fn increment_thread_local() -> usize {
-    // TODO: Use THREAD_COUNT.with to increment and return the new count
-    todo!()
+    // TODO: 使用 THREAD_COUNT.with 递增并返回新的计数值
+    THREAD_COUNT.with_borrow_mut(|v| {
+        *v += 1;
+        *v
+    })
 }
 
-/// Spawn two threads using a **scoped thread** to compute the sum of two slices without moving ownership.
+/// 使用**作用域线程**派生两个线程，计算两个切片的和，无需转移所有权。
 ///
-/// Use `thread::scope` to allow threads to borrow the slices `&[i32]`.
-/// Each thread should compute the sum of its slice, and the function returns `(sum_a, sum_b)`.
+/// 使用 `thread::scope` 允许线程借用切片 `&[i32]`。
+/// 每个线程计算其切片的和，函数返回 `(sum_a, sum_b)`。
 ///
-/// Hint: The slices are references, so you cannot move them into the closure.
-/// `thread::scope` guarantees that all spawned threads finish before the scope ends,
-/// making the borrow safe.
+/// 提示：切片是引用，所以不能将它们 move 到闭包中。
+/// `thread::scope` 保证所有派生的线程在作用域结束前完成，
+/// 使得借用是安全的。
 #[allow(unused_variables)]
 pub fn scoped_slice_sum(a: &[i32], b: &[i32]) -> (i32, i32) {
-    // TODO: Use thread::scope to spawn two threads
-    // TODO: Each thread sums its slice
-    // TODO: Wait for both threads and return the results
-    todo!()
+    // TODO: 使用 thread::scope 派生两个线程
+    // TODO: 每个线程计算其切片的和
+    // TODO: 等待两个线程并返回结果
+    thread::scope(|s| {
+        let th1 = s.spawn(|| a.iter().sum::<i32>());
+        let th2 = s.spawn(|| b.iter().sum::<i32>());
+        (th1.join().unwrap(), th2.join().unwrap())
+    })
 }
 
-/// Handle a possible panic in a spawned thread.
+/// 处理派生线程中可能发生的 panic。
 ///
-/// Spawn a thread that may panic: if `should_panic` is `true`, the thread calls `panic!("oops")`;
-/// otherwise it returns `value`.
-/// The function should return `Ok(value)` if the thread completed successfully,
-/// or `Err(())` if the thread panicked.
+/// 派生一个可能 panic 的线程：如果 `should_panic` 为 `true`，线程调用 `panic!("oops")`；
+/// 否则返回 `value`。
+/// 如果线程成功完成，函数应返回 `Ok(value)`；
+/// 如果线程 panic，函数应返回 `Err(())`。
 ///
-/// Hint: `join()` returns `Result<Result<i32, Box<dyn Any + Send>>, _>`.
-/// You'll need to match the outer `Result` (thread panic) and the inner `Result` (if the thread returns a `Result`).
-/// In this exercise, the inner type is just `i32`, not a `Result`.
+/// 提示：`join()` 返回 `Result<Result<i32, Box<dyn Any + Send>>, _>`。
+/// 你需要匹配外层的 `Result`（线程 panic）和内层的 `Result`（如果线程返回一个 `Result`）。
+/// 在本练习中，内部类型只是 `i32`，不是 `Result`。
 #[allow(unused_variables)]
 pub fn handle_panic(value: i32, should_panic: bool) -> Result<i32, ()> {
-    // TODO: Spawn a thread that either panics or returns value
-    // TODO: Join and map the result appropriately
-    todo!()
+    // TODO: 派生一个线程，要么 panic 要么返回 value
+    // TODO: 等待线程并正确映射结果
+    match thread::spawn(move || if should_panic { panic!("oops") } else { value }).join() {
+        Ok(v) => Ok(v),
+        Err(_) => Err(()),
+    }
 }
 
 #[cfg(test)]
@@ -268,18 +298,18 @@ mod tests {
         assert_eq!(parallel_sum(vec![], vec![]), (0, 0));
     }
 
-    // Advanced exercise tests
+    // 进阶练习测试
     #[test]
     fn test_named_sleeper() {
-        // The thread should sleep a short time; we just verify it returns the correct value.
-        let result = named_sleeper(42, 10); // sleep 10 ms
+        // 线程应该休眠一小段时间；我们只是验证它返回正确的值。
+        let result = named_sleeper(42, 10); // 休眠 10 毫秒
         assert_eq!(result, 42);
     }
 
     #[test]
     fn test_thread_local() {
-        // Each thread has its own counter, so spawning two threads and calling increment
-        // in each should give each thread its own sequence.
+        // 每个线程都有自己的计数器，所以派生两个线程并在每个线程中调用 increment
+        // 应该让每个线程拥有自己独立的计数序列。
         use std::sync::Arc;
         use std::sync::Mutex;
 
@@ -297,7 +327,7 @@ mod tests {
             h.join().unwrap();
         }
         let results = counters.lock().unwrap();
-        // Each thread should have counted (1, 2) independently.
+        // 每个线程应该独立计数得到 (1, 2)。
         assert_eq!(results.len(), 2);
         assert!(results.contains(&(1, 2)));
     }
@@ -309,7 +339,7 @@ mod tests {
         let (sum_a, sum_b) = scoped_slice_sum(&a, &b);
         assert_eq!(sum_a, 6);
         assert_eq!(sum_b, 60);
-        // Ensure slices are still accessible (they are borrowed, not moved).
+        // 确保切片仍然可以访问（它们是被借用，而不是被移动）。
         assert_eq!(a.len(), 3);
         assert_eq!(b.len(), 3);
     }

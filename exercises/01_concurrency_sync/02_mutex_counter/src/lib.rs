@@ -1,38 +1,69 @@
-//! # Mutex Shared State
+//! # Mutex 共享状态
 //!
-//! In this exercise, you will use `Arc<Mutex<T>>` to safely share and modify data between multiple threads.
+//! 在本练习中，你将使用 `Arc<Mutex<T>>` 在多个线程之间安全地共享和修改数据。
 //!
-//! ## Concepts
-//! - `Mutex<T>` mutex protects shared data
-//! - `Arc<T>` atomic reference counting enables cross-thread sharing
-//! - `lock()` acquires the lock and accesses data
+//! ## 核心概念
+//! - `Mutex<T>` 互斥锁保护共享数据
+//! - `Arc<T>` 原子引用计数支持跨线程共享
+//! - `lock()` 获取锁并访问数据
 
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-/// Increment a counter concurrently using `n_threads` threads.
-/// Each thread increments the counter `count_per_thread` times.
-/// Returns the final counter value.
+/// 使用 `n_threads` 个线程并发递增计数器。
+/// 每个线程递增计数器 `count_per_thread` 次。
+/// 返回最终计数器值。
 ///
-/// Hint: Use `Arc<Mutex<usize>>` as the shared counter.
+/// 提示：使用 `Arc<Mutex<usize>>` 作为共享计数器。
 pub fn concurrent_counter(n_threads: usize, count_per_thread: usize) -> usize {
-    // TODO: Create Arc<Mutex<usize>> with initial value 0
-    // TODO: Spawn n_threads threads
-    // TODO: In each thread, lock() and increment count_per_thread times
-    // TODO: Join all threads, return final value
-    todo!()
+    // TODO: 创建初始值为 0 的 Arc<Mutex<usize>>
+    // TODO: 派生 n_threads 个线程
+    // TODO: 在每个线程中 lock() 并递增 count_per_thread 次
+    // TODO: 等待所有线程结束，返回最终值
+
+    let counter = Arc::new(Mutex::new(0));
+    thread::scope(|scope| {
+        for _ in 0..n_threads {
+            scope
+                .spawn(|| {
+                    let mut ptr = counter.lock().unwrap();
+                    *ptr += count_per_thread;
+                })
+                .join()
+                .unwrap();
+        }
+    });
+    let d = counter.lock().unwrap();
+    *d
 }
 
-/// Add elements to a shared vector concurrently using multiple threads.
-/// Each thread pushes its own id (0..n_threads) to the vector.
-/// Returns the sorted vector.
+/// 使用多个线程并发地向共享向量添加元素。
+/// 每个线程将自己的 id（0..n_threads）推入向量。
+/// 返回排序后的向量。
 ///
-/// Hint: Use `Arc<Mutex<Vec<usize>>>`.
+/// 提示：使用 `Arc<Mutex<Vec<usize>>>`。
 pub fn concurrent_collect(n_threads: usize) -> Vec<usize> {
-    // TODO: Create Arc<Mutex<Vec<usize>>>
-    // TODO: Each thread pushes its own id
-    // TODO: After joining all threads, sort the result and return
-    todo!()
+    // TODO: 创建 Arc<Mutex<Vec<usize>>>
+    // TODO: 每个线程推入自己的 id
+    // TODO: 等待所有线程结束后，排序结果并返回
+
+    let counter = Arc::new(Mutex::new(vec![]));
+    thread::scope(|scope| {
+        for id in 0..n_threads {
+            let counter = counter.clone();
+            scope
+                .spawn(move || {
+                    let mut ptr = counter.lock().unwrap();
+                    ptr.push(id);
+                })
+                .join()
+                .unwrap();
+        }
+    });
+    let d = counter.lock().unwrap();
+    let mut arr = d.clone();
+    arr.sort();
+    arr
 }
 
 #[cfg(test)]

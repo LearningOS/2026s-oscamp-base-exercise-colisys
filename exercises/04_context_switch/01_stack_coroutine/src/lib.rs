@@ -1,22 +1,22 @@
-//! # Stackful Coroutine and Context Switch (riscv64)
+//! # 有栈协程与上下文切换（riscv64）
 //!
-//! In this exercise, you implement the minimal context switch using inline assembly,
-//! which is the core mechanism of OS thread scheduling. This crate is **riscv64 only**;
-//! run `cargo test` on riscv64 Linux, or use the repo's normal flow (`./check.sh` / `oscamp`) on x86 with QEMU.
+//! 在本练习中，你将使用内联汇编实现最小的上下文切换，
+//! 这是操作系统线程调度的核心机制。此 crate **仅限 riscv64**；
+//! 在 riscv64 Linux 上运行 `cargo test`，或在 x86 上使用仓库的标准流程（`./check.sh` / `oscamp`）配合 QEMU。
 //!
-//! ## Key Concepts
-//! - **Callee-saved registers**: Save and restore them on switch so the switched-away task can resume correctly later.
-//! - **Stack pointer `sp`** and **return address `ra`**: Restore them in the new context; the first time we switch to a task, `ret` jumps to `ra` (the entry point).
-//! - Inline assembly: `core::arch::asm!`
+//! ## 核心概念
+//! - **被调用者保存寄存器**：切换时保存和恢复它们，使被切换走的任务稍后能正确恢复执行。
+//! - **栈指针 `sp`** 和 **返回地址 `ra`**：在新上下文中恢复它们；首次切换到任务时，`ret` 跳转到 `ra`（入口点）。
+//! - 内联汇编：`core::arch::asm!`
 //!
-//! ## riscv64 ABI (for this exercise)
-//! - Callee-saved: `sp`, `ra`, `s0`–`s11`. The `ret` instruction is `jalr zero, 0(ra)`.
-//! - First and second arguments: `a0` (old context), `a1` (new context).
+//! ## riscv64 ABI（本练习）
+//! - 被调用者保存：`sp`、`ra`、`s0`–`s11`。`ret` 指令是 `jalr zero, 0(ra)`。
+//! - 第一和第二个参数：`a0`（旧上下文）、`a1`（新上下文）。
 
 #![cfg(target_arch = "riscv64")]
 
-/// Saved register state for one task (riscv64). Layout must match the offsets used in the asm below: for one task (riscv64). Layout must match the offsets used in the asm below:
-/// `sp` at 0, `ra` at 8, then `s0`–`s11` at 16, 24, … 104.
+/// 一个任务的保存寄存器状态（riscv64）。布局必须与下面汇编中使用的偏移量匹配：
+/// `sp` 在 0，`ra` 在 8，然后 `s0`–`s11` 在 16, 24, … 104。
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TaskContext {
@@ -56,31 +56,31 @@ impl TaskContext {
         }
     }
 
-    /// Initialize this context so that when we switch to it, execution starts at `entry`.
+    /// 初始化此上下文，使得切换到它时，执行从 `entry` 开始。
     ///
-    /// - Set `ra = entry` so that the first `ret` in the new context jumps to `entry`.
-    /// - Set `sp = stack_top` with 16-byte alignment (RISC-V ABI requires 16-byte aligned stack at function entry).
-    /// - Leave `s0`–`s11` zero; they will be loaded on switch.
+    /// - 设置 `ra = entry`，使得新上下文中第一次 `ret` 跳转到 `entry`。
+    /// - 设置 `sp = stack_top`，16 字节对齐（RISC-V ABI 要求函数入口处栈 16 字节对齐）。
+    /// - `s0`–`s11` 保持零；它们会在切换时被加载。
     pub fn init(&mut self, stack_top: usize, entry: usize) {
-        todo!("set ra = entry, sp = stack_top (16-byte aligned)")
+        todo!("设置 ra = entry, sp = stack_top（16 字节对齐）")
     }
 }
 
-/// Switch from `old` to `new` context: save current callee-saved regs into `old`, load from `new`, then `ret` (jumps to `new.ra`).
+/// 从 `old` 切换到 `new` 上下文：将当前被调用者保存寄存器保存到 `old`，从 `new` 加载，然后 `ret`（跳转到 `new.ra`）。
 ///
-/// In asm: store `sp`, `ra`, `s0`–`s11` to `[a0]` (old), load from `[a1]` (new), zero `a0`/`a1` so we do not leak pointers into the new context, then `ret`.
+/// 在汇编中：将 `sp`、`ra`、`s0`–`s11` 存储到 `[a0]`（old），从 `[a1]`（new）加载，将 `a0`/`a1` 清零以免向新上下文泄漏指针，然后 `ret`。
 ///
-/// Must be `#[unsafe(naked)]` to prevent the compiler from generating a prologue/epilogue.
+/// 必须是 `#[unsafe(naked)]` 以防止编译器生成序言/尾声。
 pub unsafe fn switch_context(old: &mut TaskContext, new: &TaskContext) {
-    todo!("save callee-saved regs to old, load from new, then ret; use #[unsafe(naked)] + naked_asm!, see module doc for riscv64 ABI and layout")
+    todo!("将被调用者保存寄存器保存到 old，从 new 加载，然后 ret；使用 #[unsafe(naked)] + naked_asm!，参见模块文档了解 riscv64 ABI 和布局")
 }
 
 const STACK_SIZE: usize = 1024 * 64;
 
-/// Allocate a stack for a coroutine. Returns `(buffer, stack_top)` where `stack_top` is the high address
-/// (stack grows down). The buffer must be kept alive for the lifetime of the context using this stack.
+/// 为协程分配栈。返回 `(buffer, stack_top)`，其中 `stack_top` 是高地址（栈向下增长）。
+/// buffer 必须在使用此栈的上下文生命周期内保持有效。
 pub fn alloc_stack() -> (Vec<u8>, usize) {
-    todo!("allocate stack buffer, return (buffer, stack_top) with stack_top 16-byte aligned")
+    todo!("分配栈缓冲区，返回 (buffer, stack_top)，其中 stack_top 16 字节对齐")
 }
 
 #[cfg(test)]

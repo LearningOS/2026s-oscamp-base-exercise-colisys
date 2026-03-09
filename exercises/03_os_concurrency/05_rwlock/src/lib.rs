@@ -1,43 +1,39 @@
-//! # Read-Write Lock (Writer-Priority)
+//! # 读写锁（写者优先）
 //!
-//! In this exercise, you will implement a **writer-priority** read-write lock from scratch using atomics.
-//! Multiple readers may hold the lock concurrently; a writer holds it exclusively.
+//! 在本练习中，你将使用原子操作从零实现一个**写者优先**的读写锁。
+//! 多个读者可以同时持有锁；写者独占持有。
 //!
-//! **Note:** Rust's standard library already provides [`std::sync::RwLock`]. This exercise implements
-//! a minimal version for learning the protocol and policy without using the standard one.
+//! **注意：** Rust 标准库已提供 [`std::sync::RwLock`]。本练习实现一个简化版本，
+//! 用于学习协议和策略，不使用标准库的实现。
 //!
-//! ## Common policies for read-write locks
-//! Different implementations can give different **priority** when both readers and writers are waiting:
+//! ## 读写锁的常见策略
+//! 不同的实现在读者和写者同时等待时可以给予不同的**优先级**：
 //!
-//! - **Reader-priority (读者优先)**: New readers are allowed to enter while a writer is waiting, so writers
-//!   may be starved if readers keep arriving.
-//! - **Writer-priority (写者优先)**: Once a writer is waiting, no new readers are admitted until that writer
-//!   has run; this exercise implements this policy.
-//! - **Read-write fair (读写公平)**: Requests are served in a fair order (e.g. FIFO or round-robin), so
-//!   neither readers nor writers are systematically starved.
+//! - **读者优先**：当写者在等待时，新读者仍可进入，因此如果读者持续到来，写者可能饥饿。
+//! - **写者优先（本实现）**：一旦有写者在等待，就不再接受新读者，直到该写者运行。
+//! - **读写公平**：按公平顺序（如 FIFO 或轮转）服务请求，读者和写者都不会系统性饥饿。
 //!
-//! ## Key Concepts
-//! - **Readers**: share access; many threads can hold a read lock at once.
-//! - **Writer**: exclusive access; only one writer, and no readers while the writer holds the lock.
-//! - **Writer-priority (this implementation)**: when at least one writer is waiting, new readers block
-//!   until the writer runs.
+//! ## 核心概念
+//! - **读者**：共享访问；多个线程可同时持有读锁。
+//! - **写者**：独占访问；写者持有锁时，不能有其他写者或读者。
+//! - **写者优先（本实现）**：当至少有一个写者在等待时，新读者会被阻塞直到写者运行。
 //!
-//! ## State (single atomic)
-//! We use one `AtomicU32`: low bits = reader count, two flags = writer holding / writer waiting.
-//! All logic is implemented with compare_exchange and load/store; no use of `std::sync::RwLock`.
+//! ## 状态（单一原子变量）
+//! 我们使用一个 `AtomicU32`：低位 = 读者计数，两个标志位 = 写者持有 / 写者等待。
+//! 所有逻辑用 compare_exchange 和 load/store 实现；不使用 `std::sync::RwLock`。
 
 use std::cell::UnsafeCell;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicU32, Ordering};
 
-/// Maximum number of concurrent readers (fits in state bits).
+/// 最大并发读者数（适应状态位）
 const READER_MASK: u32 = (1 << 30) - 1;
-/// Bit set when a writer holds the lock.
+/// 写者持有锁时设置的位。
 const WRITER_HOLDING: u32 = 1 << 30;
-/// Bit set when at least one writer is waiting (writer-priority: block new readers).
+/// 至少有一个写者在等待时设置的位（写者优先：阻塞新读者）。
 const WRITER_WAITING: u32 = 1 << 31;
 
-/// Writer-priority read-write lock. Implemented from scratch; does not use `std::sync::RwLock`.
+/// 写者优先读写锁。从零实现；不使用 `std::sync::RwLock`。
 pub struct RwLock<T> {
     state: AtomicU32,
     data: UnsafeCell<T>,
@@ -54,38 +50,38 @@ impl<T> RwLock<T> {
         }
     }
 
-    /// Acquire a read lock. Blocks (spins) until no writer holds and no writer is waiting (writer-priority).
+    /// 获取读锁。阻塞（自旋）直到没有写者持有且没有写者在等待（写者优先）。
     ///
-    /// TODO: Implement read lock acquisition
-    /// 1. In a loop, load state (Acquire).
-    /// 2. If WRITER_HOLDING or WRITER_WAITING is set, spin_loop and continue (writer-priority: no new readers while writer waits).
-    /// 3. If reader count (state & READER_MASK) is already READER_MASK, spin and continue.
-    /// 4. Try compare_exchange(s, s + 1, AcqRel, Acquire); on success return RwLockReadGuard { lock: self }.
+    /// TODO: 实现读锁获取
+    /// 1. 在循环中，加载 state（Acquire）。
+    /// 2. 如果设置了 WRITER_HOLDING 或 WRITER_WAITING，spin_loop 并继续（写者优先：写者等待时阻止新读者）。
+    /// 3. 如果读者计数（state & READER_MASK）已经是 READER_MASK，自旋并继续。
+    /// 4. 尝试 compare_exchange(s, s + 1, AcqRel, Acquire)；成功则返回 RwLockReadGuard { lock: self }。
     pub fn read(&self) -> RwLockReadGuard<'_, T> {
         // TODO
         todo!()
     }
 
-    /// Acquire the write lock. Blocks until no readers and no other writer.
+    /// 获取写锁。阻塞直到没有读者且没有其他写者。
     ///
-    /// TODO: Implement write lock acquisition (writer-priority)
-    /// 1. Set WRITER_WAITING first: fetch_or(WRITER_WAITING, Release) so new readers will block.
-    /// 2. In a loop: load state; if any readers (READER_MASK) or WRITER_HOLDING, spin_loop and continue.
-    /// 3. Try compare_exchange(WRITER_WAITING, WRITER_HOLDING, ...) to take the lock; or compare_exchange(0, WRITER_HOLDING, ...) if a writer just released.
-    /// 4. On success return RwLockWriteGuard { lock: self }.
+    /// TODO: 实现写锁获取（写者优先）
+    /// 1. 首先设置 WRITER_WAITING：fetch_or(WRITER_WAITING, Release) 让新读者阻塞。
+    /// 2. 在循环中：加载 state；如果有读者（READER_MASK）或 WRITER_HOLDING，spin_loop 并继续。
+    /// 3. 尝试 compare_exchange(WRITER_WAITING, WRITER_HOLDING, ...) 获取锁；或者如果写者刚释放，compare_exchange(0, WRITER_HOLDING, ...)。
+    /// 4. 成功则返回 RwLockWriteGuard { lock: self }。
     pub fn write(&self) -> RwLockWriteGuard<'_, T> {
         // TODO
         todo!()
     }
 }
 
-/// Guard for a read lock; releases the read lock on drop.
+/// 读锁守卫；drop 时释放读锁。
 pub struct RwLockReadGuard<'a, T> {
     lock: &'a RwLock<T>,
 }
 
-// TODO: Implement Deref for RwLockReadGuard
-// Return shared reference to data: unsafe { &*self.lock.data.get() }
+// TODO: 为 RwLockReadGuard 实现 Deref
+// 返回数据的共享引用：unsafe { &*self.lock.data.get() }
 impl<T> Deref for RwLockReadGuard<'_, T> {
     type Target = T;
 
@@ -94,21 +90,21 @@ impl<T> Deref for RwLockReadGuard<'_, T> {
     }
 }
 
-// TODO: Implement Drop for RwLockReadGuard
-// Decrement reader count: self.lock.state.fetch_sub(1, Ordering::Release)
+// TODO: 为 RwLockReadGuard 实现 Drop
+// 递减读者计数：self.lock.state.fetch_sub(1, Ordering::Release)
 impl<T> Drop for RwLockReadGuard<'_, T> {
     fn drop(&mut self) {
         todo!()
     }
 }
 
-/// Guard for a write lock; releases the write lock on drop.
+/// 写锁守卫；drop 时释放写锁。
 pub struct RwLockWriteGuard<'a, T> {
     lock: &'a RwLock<T>,
 }
 
-// TODO: Implement Deref for RwLockWriteGuard
-// Return shared reference: unsafe { &*self.lock.data.get() }
+// TODO: 为 RwLockWriteGuard 实现 Deref
+// 返回共享引用：unsafe { &*self.lock.data.get() }
 impl<T> Deref for RwLockWriteGuard<'_, T> {
     type Target = T;
 
@@ -117,16 +113,16 @@ impl<T> Deref for RwLockWriteGuard<'_, T> {
     }
 }
 
-// TODO: Implement DerefMut for RwLockWriteGuard
-// Return mutable reference: unsafe { &mut *self.lock.data.get() }
+// TODO: 为 RwLockWriteGuard 实现 DerefMut
+// 返回可变引用：unsafe { &mut *self.lock.data.get() }
 impl<T> DerefMut for RwLockWriteGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut T {
         todo!()
     }
 }
 
-// TODO: Implement Drop for RwLockWriteGuard
-// Clear writer bits so lock is free: self.lock.state.fetch_and(!(WRITER_HOLDING | WRITER_WAITING), Ordering::Release)
+// TODO: 为 RwLockWriteGuard 实现 Drop
+// 清除写者位使锁空闲：self.lock.state.fetch_and(!(WRITER_HOLDING | WRITER_WAITING), Ordering::Release)
 impl<T> Drop for RwLockWriteGuard<'_, T> {
     fn drop(&mut self) {
         todo!()

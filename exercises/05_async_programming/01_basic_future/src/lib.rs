@@ -1,18 +1,18 @@
-//! # Manual Future Implementation
+//! # 手动实现 Future
 //!
-//! In this exercise, you will manually implement the `Future` trait for custom types to understand the core mechanism of asynchronous runtime.
+//! 在本练习中，你将为自定义类型手动实现 `Future` trait，以理解异步运行时的核心机制。
 //!
-//! ## Concepts
+//! ## 概念
 //! - `std::future::Future` trait
-//! - `Poll::Ready` and `Poll::Pending`
-//! - The role of `Waker`: notifying the runtime to poll again
+//! - `Poll::Ready` 和 `Poll::Pending`
+//! - `Waker` 的作用：通知运行时再次轮询
 
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-/// Countdown Future: decrements count by 1 each time it's polled,
-/// returns `"liftoff!"` when count reaches 0.
+/// 倒计时 Future：每次轮询时将计数减 1，
+/// 当计数到达 0 时返回 `"liftoff!"`。
 pub struct CountDown {
     pub count: u32,
 }
@@ -23,12 +23,12 @@ impl CountDown {
     }
 }
 
-// TODO: Implement Future trait for CountDown
-// - Output type is &'static str
-// - Each poll: if count == 0, return Poll::Ready("liftoff!")
-// - Otherwise count -= 1, call cx.waker().wake_by_ref(), return Poll::Pending
+// TODO: 为 CountDown 实现 Future trait
+// - Output 类型是 &'static str
+// - 每次轮询：如果 count == 0，返回 Poll::Ready("liftoff!")
+// - 否则 count -= 1，调用 cx.waker().wake_by_ref()，返回 Poll::Pending
 //
-// Hint: Use `self.get_mut()` to get `&mut Self` (since self is Pin<&mut Self>)
+// 提示：使用 `self.get_mut()` 获取 `&mut Self`（因为 self 是 Pin<&mut Self>）
 impl Future for CountDown {
     type Output = &'static str;
 
@@ -37,8 +37,8 @@ impl Future for CountDown {
     }
 }
 
-/// Yield-only-once Future: first poll returns Pending, second returns Ready(()).
-/// This is the minimal example of an asynchronous state machine.
+/// 只让出一次的 Future：第一次轮询返回 Pending，第二次返回 Ready(())。
+/// 这是最小的异步状态机示例。
 pub struct YieldOnce {
     yielded: bool,
 }
@@ -49,10 +49,10 @@ impl YieldOnce {
     }
 }
 
-// TODO: Implement Future trait for YieldOnce
-// - Output type is ()
-// - First poll: set yielded = true, wake waker, return Pending
-// - Second poll: return Ready(())
+// TODO: 为 YieldOnce 实现 Future trait
+// - Output 类型是 ()
+// - 第一次轮询：设置 yielded = true，唤醒 waker，返回 Pending
+// - 第二次轮询：返回 Ready(())
 impl Future for YieldOnce {
     type Output = ();
 

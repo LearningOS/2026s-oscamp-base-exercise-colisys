@@ -1,22 +1,22 @@
-//! # Single‑Level Page Table Address Translation
+//! # 单级页表地址翻译
 //!
-//! This exercise simulates a simple single‑level page table to help you understand the process of virtual‑to‑physical address translation.
+//! 本练习模拟一个简单的单级页表，帮助你理解虚拟地址到物理地址翻译的过程。
 //!
-//! ## Concepts
-//! - Virtual address = Virtual Page Number (VPN) + Page Offset (offset)
-//! - Page table: VPN → PPN mapping table
-//! - Address translation: Physical address = PPN × PAGE_SIZE + offset
-//! - Page fault: accessing an unmapped virtual page
+//! ## 概念
+//! - 虚拟地址 = 虚拟页号（VPN）+ 页内偏移（offset）
+//! - 页表：VPN → PPN 的映射表
+//! - 地址翻译：物理地址 = PPN × PAGE_SIZE + offset
+//! - 页错误：访问未映射的虚拟页
 //!
-//! ## Address Format (Simplified Model)
+//! ## 地址格式（简化模型）
 //! ```text
-//! Virtual address (32‑bit):
+//! 虚拟地址（32 位）:
 //! 31          12 11          0
 //! ┌──────────────┬────────────┐
-//! │   VPN (20 bits)  │ offset (12 bits) │
+//! │   VPN (20 位)  │ offset (12 位) │
 //! └──────────────┴────────────┘
 //!
-//! Page size: 4KB (2^12 = 4096 bytes)
+//! 页大小：4KB（2^12 = 4096 字节）
 //! ```
 
 /// 页大小 4KB
