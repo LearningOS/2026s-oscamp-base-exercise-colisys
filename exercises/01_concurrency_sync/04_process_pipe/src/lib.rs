@@ -30,7 +30,7 @@
 //! 运行 `cargo test` 来检查你的实现。
 
 use std::io::{self, Read, Write};
-use std::process::{Command, Stdio};
+use std::process::{self, Command, Stdio};
 
 /// 执行给定的 shell 命令并返回其标准输出。
 ///
@@ -51,7 +51,13 @@ pub fn run_command(program: &str, args: &[&str]) -> String {
     // TODO: 设置 stdout 为 Stdio::piped()
     // TODO: 用 .output() 执行并获取输出
     // TODO: 将 stdout 转换为 String 并返回
-    todo!()
+    let output_u8 = &Command::new(program)
+        .args(args)
+        .stdout(Stdio::piped())
+        .output()
+        .unwrap()
+        .stdout;
+    String::from_utf8_lossy(output_u8).to_string()
 }
 
 /// 通过管道向子进程（cat）的 stdin 写入数据，并读取其 stdout 输出。
@@ -87,7 +93,26 @@ pub fn pipe_through_cat(input: &str) -> String {
     // TODO: 将 input 写入子进程 stdin
     // TODO: 丢弃 stdin 以关闭管道（否则 cat 不会退出）
     // TODO: 从子进程 stdout 读取输出
-    todo!()
+    let mut process = Command::new("cat")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let mut stdin = process.stdin.take().unwrap();
+        stdin.write_all(input.as_bytes()).unwrap();
+        drop(stdin);
+    }
+
+    process.wait().unwrap();
+    let mut s = String::new();
+    process
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut s)
+        .unwrap();
+    s
 }
 
 /// 获取子进程退出码。
@@ -108,7 +133,9 @@ pub fn get_exit_code(command: &str) -> i32 {
     // TODO: 使用 Command::new("sh").args(["-c", command])
     // TODO: 执行并获取状态
     // TODO: 返回退出码
-    todo!()
+    let child = Command::new("sh").args(["-c", command]).spawn().unwrap();
+    let result = child.wait_with_output().unwrap();
+    result.status.code().unwrap()
 }
 
 /// 执行给定的 shell 命令并以 `Result` 形式返回其标准输出。
@@ -135,7 +162,11 @@ pub fn run_command_with_result(program: &str, args: &[&str]) -> io::Result<Strin
     // TODO: 设置 stdout 为 Stdio::piped()
     // TODO: 用 .output() 执行并处理 Result
     // TODO: 用 from_utf8 将 stdout 转换为 String，将错误映射为 io::Error
-    todo!()
+    let output = Command::new(program)
+        .args(args)
+        .stdout(Stdio::piped())
+        .output()?;
+    Ok(String::from_utf8(output.stdout).unwrap())
 }
 
 /// 通过双向管道与 `grep` 交互，过滤包含特定模式的行。
@@ -164,7 +195,24 @@ pub fn pipe_through_grep(pattern: &str, input: &str) -> String {
     // TODO: 丢弃 stdin 以关闭管道
     // TODO: 逐行读取子进程 stdout 输出
     // TODO: 收集并返回匹配的行
-    todo!()
+    let mut child = Command::new("grep")
+        .args([pattern])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let mut stdin = child.stdin.take().unwrap();
+        stdin.write_all(input.as_bytes()).unwrap();
+        drop(stdin);
+    };
+
+    {
+        let mut stdout = child.stdout.take().unwrap();
+        let mut buf = vec![];
+        stdout.read_to_end(&mut buf).unwrap();
+        String::from_utf8(buf).unwrap()
+    }
 }
 
 #[cfg(test)]

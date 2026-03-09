@@ -18,7 +18,19 @@ pub fn simple_send_recv(items: Vec<String>) -> Vec<String> {
     // TODO: 派生线程发送 items 中的每个元素
     // TODO: 在主线程中接收所有消息并收集到 Vec
     // 提示：当所有 Sender 被丢弃后，recv() 会返回 Err
-    todo!()
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        items.iter().for_each(|item| {
+            tx.send(item.to_string()).unwrap();
+        });
+    })
+    .join()
+    .unwrap();
+    let mut result = vec![];
+    while let Ok(t) = rx.recv() {
+        result.push(t);
+    }
+    result
 }
 
 /// 创建 `n_producers` 个生产者线程，每个发送格式为 `"msg from {id}"` 的消息。
@@ -30,7 +42,25 @@ pub fn multi_producer(n_producers: usize) -> Vec<String> {
     // TODO: 为每个生产者克隆一个发送者
     // TODO: 记得丢弃原始发送者，否则接收者不会结束
     // TODO: 收集所有消息并排序
-    todo!()
+
+    let (tx, rx) = mpsc::channel();
+    {
+        for id in 0..n_producers {
+            let tx = tx.clone();
+            thread::spawn(move || {
+                tx.send(format!("msg from {}", id)).unwrap();
+            })
+            .join()
+            .unwrap();
+        }
+        drop(tx);
+    }
+
+    let mut result = vec![];
+    while let Ok(t) = rx.recv() {
+        result.push(t);
+    }
+    result
 }
 
 #[cfg(test)]
