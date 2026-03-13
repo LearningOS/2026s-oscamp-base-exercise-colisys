@@ -27,7 +27,36 @@
 pub unsafe extern "C" fn my_memcpy(dst: *mut u8, src: *const u8, n: usize) -> *mut u8 {
     // TODO: 实现 memcpy
     // 提示：逐字节从 src 读取并写入 dst
-    todo!()
+    // 理想的情况是两者不交叠，如
+    // src = 0..3
+    // dst = 4..8
+    let dst_range = (dst as usize)..(dst as usize + n);
+    let src_range = (src as usize)..(dst as usize + n);
+    // 如果 src 的尾部覆盖到 dst 的开头，就像：
+    //      dst
+    //    ======
+    // ----
+    // src
+    //
+    // 应该使用 my_memmove
+    if src_range.end > dst_range.start {
+        return my_memmove(dst, src, n);
+    }
+    // 如果 dst 的尾部覆盖到 src 的开头，就像：
+    //  dst
+    // =====
+    //   -----
+    //    src
+    //
+    // 应该使用 my_memmove
+    if dst_range.end > src_range.start {
+        return my_memmove(dst, src, n);
+    }
+
+    for i in 0..n {
+        dst.add(i).write(src.add(i).read());
+    }
+    dst
 }
 
 /// 将从 `dst` 开始的 `n` 个字节设置为值 `c`。
@@ -39,7 +68,8 @@ pub unsafe extern "C" fn my_memcpy(dst: *mut u8, src: *const u8, n: usize) -> *m
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn my_memset(dst: *mut u8, c: u8, n: usize) -> *mut u8 {
     // TODO: 实现 memset
-    todo!()
+    dst.write_bytes(c, n);
+    dst
 }
 
 /// 从 `src` 复制 `n` 个字节到 `dst`，正确处理重叠内存。
@@ -52,7 +82,20 @@ pub unsafe extern "C" fn my_memset(dst: *mut u8, c: u8, n: usize) -> *mut u8 {
 pub unsafe extern "C" fn my_memmove(dst: *mut u8, src: *const u8, n: usize) -> *mut u8 {
     // TODO: 实现 memmove
     // 提示：当 dst > src 且区域重叠时，从后向前复制（从末尾到开头）
-    todo!()
+    let dst_range = (dst as usize)..(dst as usize + n);
+    let src_range = (src as usize)..(dst as usize + n);
+
+    if dst_range.start < src_range.end || dst_range.end < src_range.start {
+        // 进行反向复制
+        for i in 0..n {
+            let i = n - i - 1;
+            dst.add(i).write(src.add(i).read());
+        }
+    } else {
+        return my_memcpy(dst, src, n);
+    }
+
+    dst
 }
 
 /// 返回以 null 结尾的字节字符串的长度，不包括末尾的 null。
@@ -62,7 +105,16 @@ pub unsafe extern "C" fn my_memmove(dst: *mut u8, src: *const u8, n: usize) -> *
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn my_strlen(s: *const u8) -> usize {
     // TODO: 实现 strlen
-    todo!()
+    let mut count: usize = 0;
+
+    loop {
+        match s.add(count).read() {
+            0x0 => break,
+            _ => count += 1,
+        };
+    }
+
+    count
 }
 
 /// 比较两个以 null 结尾的字节字符串。
@@ -77,7 +129,28 @@ pub unsafe extern "C" fn my_strlen(s: *const u8) -> usize {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn my_strcmp(s1: *const u8, s2: *const u8) -> i32 {
     // TODO: 实现 strcmp
-    todo!()
+    let mut count: usize = 0;
+    loop {
+        let ch1 = s1.add(count).read();
+        let ch2 = s2.add(count).read();
+
+        if ch1 > ch2 {
+            return 1;
+        } else if ch2 > ch1 {
+            return -1;
+        }
+
+        if ch1 as char == '\0' && ch2 as char == '\0' {
+            break;
+        } else if ch1 as char == '\0' {
+            return 1;
+        } else if ch2 as char == '\0' {
+            return -1;
+        }
+
+        count += 1;
+    }
+    0
 }
 
 // ============================================================

@@ -36,8 +36,11 @@ use core::ptr::null_mut;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 pub struct BumpAllocator {
+    // 堆起始地址
     heap_start: usize,
+    // 堆结束地址
     heap_end: usize,
+    // 下一个地址（相对 heap_start 的偏移）
     next: AtomicUsize,
 }
 
@@ -74,7 +77,36 @@ unsafe impl GlobalAlloc for BumpAllocator {
         // 5. 使用 compare_exchange 原子地将 next 更新为 end
         //    （如果 CAS 失败，说明其他线程竞争——在循环中重试）
         // 6. 将对齐后的地址作为指针返回
-        todo!()
+        // todo!();
+
+        // 检查当前偏移
+        let current_offset = self.next.load(Ordering::SeqCst);
+        // 获得对齐
+        let align = layout.align();
+        // 计算真实的偏移
+        let aligned_offset = (current_offset + align - 1) & !(align - 1);
+
+        // 获得申请单元的长度
+        let size = layout.size();
+
+        let next = aligned_offset + size;
+        // 申请该长度会导致堆溢出，返回 null_mut
+        if next > self.heap_end {
+            return null_mut();
+        };
+
+        loop {
+            if let Ok(_) = self.next.compare_exchange(
+                current_offset,
+                next,
+                Ordering::SeqCst,
+                Ordering::Relaxed,
+            ) {
+                break;
+            }
+        }
+
+        aligned_offset as *mut u8
     }
 
     unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {

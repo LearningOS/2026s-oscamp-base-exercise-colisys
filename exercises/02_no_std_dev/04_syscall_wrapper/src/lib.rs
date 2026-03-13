@@ -55,21 +55,57 @@ pub struct SyscallABI {
 pub fn x86_64_abi() -> SyscallABI {
     // TODO: 填充 x86_64 系统调用 ABI
     // 提示：x86_64 使用 "syscall" 指令，系统调用号在 rax 中
-    todo!()
+    // todo!();
+    SyscallABI {
+        arch: "x86_64",
+        instruction: "syscall",
+        id_reg: "rax",
+        ret_reg: "rax",
+        arg_regs: &["rdi", "rsi", "rdx", "r10", "r8", "r9"],
+        clobbered: &["rcx", "r11"],
+        sys_write: 1,
+        sys_read: 0,
+        sys_close: 3,
+        sys_exit: 60,
+    }
 }
 
 /// 返回 aarch64 Linux 系统调用 ABI 描述
 pub fn aarch64_abi() -> SyscallABI {
     // TODO: 填充 aarch64 系统调用 ABI
     // 提示：aarch64 使用 "svc #0" 指令，系统调用号在 x8 中
-    todo!()
+    // todo!()
+    SyscallABI {
+        arch: "aarch64",
+        instruction: "svc #0",
+        id_reg: "x8",
+        ret_reg: "x0",
+        arg_regs: &["x0", "x1", "x2", "x3", "x4", "x5"],
+        clobbered: &[],
+        sys_write: 64,
+        sys_read: 63,
+        sys_close: 57,
+        sys_exit: 93,
+    }
 }
 
 /// 返回 riscv64 Linux 系统调用 ABI 描述
 pub fn riscv64_abi() -> SyscallABI {
     // TODO: 填充 riscv64 系统调用 ABI
     // 提示：riscv64 使用 "ecall" 指令，系统调用号在 a7 中
-    todo!()
+    // todo!()
+    SyscallABI {
+        arch: "riscv64",
+        instruction: "ecall",
+        id_reg: "a7",
+        ret_reg: "a0",
+        arg_regs: &["a0", "a1", "a2", "a3", "a4", "a5"],
+        clobbered: &[],
+        sys_write: 64,
+        sys_read: 63,
+        sys_close: 57,
+        sys_exit: 93,
+    }
 }
 
 // ============================================================
@@ -88,7 +124,15 @@ pub unsafe fn syscall3(id: usize, arg0: usize, arg1: usize, arg2: usize) -> isiz
     //   - inlateout("rax") id => ret
     //   - in("rdi") arg0, in("rsi") arg1, in("rdx") arg2
     //   - out("rcx") _, out("r11") _
-    todo!()
+    // todo!()
+    let mut ret: isize = 0;
+    core::arch::asm!(
+        "syscall",
+        inlateout("rax") id => ret,
+        in("rdi") arg0, in("rsi") arg1, in("rdx") arg2,
+        out("rcx") _, out("r11") _
+    );
+    ret
 }
 
 #[cfg(all(target_arch = "aarch64", target_os = "linux"))]
@@ -99,7 +143,15 @@ pub unsafe fn syscall3(id: usize, arg0: usize, arg1: usize, arg2: usize) -> isiz
     //   - in("x8") id
     //   - inlateout("x0") arg0 => ret
     //   - in("x1") arg1, in("x2") arg2
-    todo!()
+    // todo!()
+    let mut ret: isize = 0;
+    core::arch::asm!(
+        "svc #0",
+        in("x8") id,
+        inlateout("x0") arg0 => ret,
+        in("x1") arg1, in("x2") arg2
+    );
+    ret
 }
 
 // 非 Linux 平台：提供桩函数以便代码编译通过
@@ -140,25 +192,32 @@ const NATIVE_SYS_EXIT: usize = 0;
 /// 将 `buf` 中的数据写入文件描述符 `fd`。
 pub fn sys_write(fd: usize, buf: &[u8]) -> isize {
     // TODO: 调用 syscall3 实现 write
-    todo!()
+    // todo!()
+    let buf_ptr = buf.as_ptr() as usize;
+    unsafe { syscall3(NATIVE_SYS_WRITE, fd, buf_ptr, buf.len()) }
 }
 
 /// 从文件描述符 `fd` 读取数据到 `buf`。
 pub fn sys_read(fd: usize, buf: &mut [u8]) -> isize {
     // TODO: 调用 syscall3 实现 read
-    todo!()
+    // todo!()
+    let buf_ptr = buf.as_ptr() as usize;
+    unsafe { syscall3(NATIVE_SYS_READ, fd, buf_ptr, buf.len()) }
 }
 
 /// 关闭文件描述符 `fd`。
 pub fn sys_close(fd: usize) -> isize {
     // TODO: 调用 syscall3 实现 close
-    todo!()
+    // todo!()
+    unsafe { syscall3(NATIVE_SYS_CLOSE, fd, 0, 0) }
 }
 
 /// 终止当前进程。
 pub fn sys_exit(code: i32) -> ! {
     // TODO: 调用 syscall3 实现 exit
-    todo!()
+    // todo!()
+    unsafe { syscall3(NATIVE_SYS_EXIT, code as usize, 0, 0) };
+    loop {}
 }
 
 // ============================================================

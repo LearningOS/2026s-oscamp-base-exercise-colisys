@@ -100,6 +100,37 @@ impl FreeListAllocator {
     fn set_free_list_head(&self, head: *mut FreeBlock) {
         unsafe { *self.free_list.get() = head }
     }
+
+    unsafe fn alloc_from_bump(&self, layout: Layout) -> *mut u8 {
+        // 检查当前偏移
+        let current_offset = self.bump_next.load(core::sync::atomic::Ordering::SeqCst);
+        // 获得对齐
+        let align = layout.align();
+        // 计算真实的偏移
+        let aligned_offset = (current_offset + align - 1) & !(align - 1);
+
+        // 获得申请单元的长度
+        let size = layout.size();
+
+        let next = aligned_offset + size;
+        // 申请该长度会导致堆溢出，返回 null_mut
+        if next > self.heap_end {
+            return null_mut();
+        };
+
+        loop {
+            if let Ok(_) = self.bump_next.compare_exchange(
+                current_offset,
+                next,
+                core::sync::atomic::Ordering::SeqCst,
+                core::sync::atomic::Ordering::Relaxed,
+            ) {
+                break;
+            }
+        }
+
+        aligned_offset as *mut u8
+    }
 }
 
 unsafe impl GlobalAlloc for FreeListAllocator {
@@ -119,7 +150,46 @@ unsafe impl GlobalAlloc for FreeListAllocator {
         // TODO: 步骤 2 —— free_list 中没有合适的块，从 bump 区域分配
         //
         // 与 02_bump_allocator 的 alloc 逻辑相同
-        todo!()
+        // todo!();
+
+        // 指向 free_list 的指针
+        let mut free_list_ptr = self.free_list_head();
+        // free_list_ptr 的前驱指针
+        let mut prev_block = null_mut() as *mut FreeBlock;
+        // 基于堆起始地址的累积偏移量
+        let mut offset = self.heap_start;
+        // 通过指针遍历链表
+        loop {
+            if free_list_ptr.is_null() {
+                // free_list_ptr 指向了空，直接从 bump 中申请空间
+                return self.alloc_from_bump(layout);
+            } else {
+                let free_block = free_list_ptr.read();
+                let aligned_offset = (offset + align - 1) & !(align - 1);
+                #[cfg(test)]
+                println!(
+                    "aligned_offset:{}, offset:{}, offset%align={}",
+                    aligned_offset,
+                    offset,
+                    offset.rem_euclid(align)
+                );
+                if aligned_offset == offset && free_block.size >= size {
+                    // 从链表中摘除节点
+                    if prev_block.is_null() {
+                        self.set_free_list_head(free_block.next);
+                    } else {
+                        prev_block.read().next = free_block.next;
+                    }
+                    // 可以安全的将偏移量作为地址返回
+                    return offset as *mut u8;
+                }
+                // 记录偏移量
+                offset += free_block.size;
+                // 向后移动
+                prev_block = free_list_ptr;
+                free_list_ptr = free_block.next;
+            }
+        }
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
@@ -131,7 +201,18 @@ unsafe impl GlobalAlloc for FreeListAllocator {
         // 1. 将 ptr 转换为 *mut FreeBlock
         // 2. 写入 FreeBlock { size, next: 当前链表头 }
         // 3. 将 free_list 头更新为 ptr
-        todo!()
+        // todo!();
+
+        // 这里的思想是，释放的区块里面的内容已经作废，
+        // 可以安全的在那个地方写入 FreeBlock，并且
+        // 将指针加入 FreeList 中
+        // 遍历 FreeList 实际上是在跳跃访问 heap 空间
+        let ptr = ptr as *mut FreeBlock;
+        ptr.write(FreeBlock {
+            size,
+            next: self.free_list_head(),
+        });
+        self.set_free_list_head(ptr);
     }
 }
 
