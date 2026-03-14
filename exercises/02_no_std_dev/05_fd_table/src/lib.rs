@@ -36,7 +36,7 @@
 //! - fd 号复用策略（找最小空闲槽位）
 //! - `Arc` 引用计数与资源释放
 
-use std::sync::Arc;
+use std::{ops::BitOrAssign, sync::Arc};
 
 /// 文件抽象 trait —— 内核中所有"文件"（普通文件、管道、套接字）都实现此 trait
 pub trait File: Send + Sync {
@@ -49,13 +49,14 @@ pub struct FdTable {
     // TODO: 设计内部结构
     // 提示：使用 Vec<Option<Arc<dyn File>>>
     //       索引是 fd 号，None 表示 fd 已关闭或未分配
+    table: Vec<Option<Arc<dyn File>>>,
 }
 
 impl FdTable {
     /// 创建空的 fd 表
     pub fn new() -> Self {
         // TODO
-        todo!()
+        FdTable { table: vec![] }
     }
 
     /// 分配新的 fd，返回 fd 号。
@@ -63,25 +64,53 @@ impl FdTable {
     /// 优先复用最小的已关闭 fd 号；如果没有空闲槽位，则追加到末尾。
     pub fn alloc(&mut self, file: Arc<dyn File>) -> usize {
         // TODO
-        todo!()
+        let mut fd: usize = 0;
+        for ele in self.table.iter_mut() {
+            if ele.is_none() {
+                println!("alloc: found reusable fd {}", fd);
+                *ele = Some(file);
+                return fd;
+            } else {
+                println!("alloc: fd {} is some, skip", fd);
+            }
+            fd += 1;
+        }
+        println!("alloc: alloc new fd @ {}", fd);
+        self.table.push(Some(file));
+        fd
     }
 
     /// 获取 fd 对应的文件对象。如果 fd 不存在或已关闭，返回 None。
     pub fn get(&self, fd: usize) -> Option<Arc<dyn File>> {
         // TODO
-        todo!()
+        if let Some(_fd) = self.table.get(fd) {
+            if let Some(_f) = _fd {
+                return Some(_f.clone());
+            }
+        }
+
+        None
     }
 
     /// 关闭 fd。成功返回 true，如果 fd 不存在或已关闭返回 false。
     pub fn close(&mut self, fd: usize) -> bool {
         // TODO
-        todo!()
+        if self.get(fd).is_some() {
+            if let Some(_f) = self.table.get_mut(fd) {
+                *_f = None;
+                println!("close: set *_f @ {} to None, {:?}", fd, _f.is_none());
+            }
+            true
+        } else {
+            println!("close: not found fd {}", fd);
+            false
+        }
     }
 
     /// 返回当前已分配的 fd 数量（不包括已关闭的）
     pub fn count(&self) -> usize {
         // TODO
-        todo!()
+        self.table.iter().filter(|x| x.is_some()).count()
     }
 }
 
@@ -138,6 +167,7 @@ mod tests {
         let mut table = FdTable::new();
         let file = MockFile::new(42);
         let fd = table.alloc(file);
+        assert_eq!(fd, 0);
         let got = table.get(fd);
         assert!(got.is_some(), "get should return Some");
         let mut buf = [0u8; 1];
@@ -188,9 +218,9 @@ mod tests {
         let fd0 = table.alloc(MockFile::new(0));
         let fd1 = table.alloc(MockFile::new(1));
         assert_eq!(table.count(), 2);
-        table.close(fd0);
+        assert!(table.close(fd0));
         assert_eq!(table.count(), 1);
-        table.close(fd1);
+        assert!(table.close(fd1));
         assert_eq!(table.count(), 0);
     }
 

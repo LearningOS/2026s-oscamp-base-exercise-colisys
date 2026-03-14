@@ -30,8 +30,8 @@ pub unsafe extern "C" fn my_memcpy(dst: *mut u8, src: *const u8, n: usize) -> *m
     // 理想的情况是两者不交叠，如
     // src = 0..3
     // dst = 4..8
-    let dst_range = (dst as usize)..(dst as usize + n);
-    let src_range = (src as usize)..(dst as usize + n);
+    // let dst_range = (dst as usize)..(dst as usize + n);
+    // let src_range = (src as usize)..(dst as usize + n);
     // 如果 src 的尾部覆盖到 dst 的开头，就像：
     //      dst
     //    ======
@@ -39,9 +39,9 @@ pub unsafe extern "C" fn my_memcpy(dst: *mut u8, src: *const u8, n: usize) -> *m
     // src
     //
     // 应该使用 my_memmove
-    if src_range.end > dst_range.start {
-        return my_memmove(dst, src, n);
-    }
+    // if src_range.end > dst_range.start {
+    //     return my_memmove(dst, src, n);
+    // }
     // 如果 dst 的尾部覆盖到 src 的开头，就像：
     //  dst
     // =====
@@ -49,9 +49,9 @@ pub unsafe extern "C" fn my_memcpy(dst: *mut u8, src: *const u8, n: usize) -> *m
     //    src
     //
     // 应该使用 my_memmove
-    if dst_range.end > src_range.start {
-        return my_memmove(dst, src, n);
-    }
+    // if dst_range.end > src_range.start {
+    //     return my_memmove(dst, src, n);
+    // }
 
     for i in 0..n {
         dst.add(i).write(src.add(i).read());

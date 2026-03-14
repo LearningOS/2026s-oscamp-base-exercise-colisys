@@ -26,19 +26,23 @@ impl AtomicCounter {
     /// 提示：使用 `fetch_add` 和 `Ordering::Relaxed`
     pub fn increment(&self) -> u64 {
         // TODO
-        todo!()
+        // todo!()
+        self.value.fetch_add(1, Ordering::Relaxed)
     }
 
     /// 原子地减 1，返回减法**之前**的值。
     pub fn decrement(&self) -> u64 {
         // TODO
-        todo!()
+        // todo!()
+        let digit = self.value.load(Ordering::Relaxed);
+        self.value.store(digit.wrapping_sub(1), Ordering::Relaxed);
+        digit
     }
 
     /// 获取当前值。
     pub fn get(&self) -> u64 {
         // TODO
-        todo!()
+        self.value.load(Ordering::Relaxed)
     }
 
     /// 原子 CAS（比较并交换）操作。
@@ -48,7 +52,8 @@ impl AtomicCounter {
     /// 提示：使用 `compare_exchange`，成功顺序为 `Ordering::AcqRel`，失败顺序为 `Ordering::Acquire`
     pub fn compare_and_swap(&self, expected: u64, new_val: u64) -> Result<u64, u64> {
         // TODO
-        todo!()
+        self.value
+            .compare_exchange(expected, new_val, Ordering::AcqRel, Ordering::Acquire)
     }
 
     /// 使用 CAS 循环原子地乘以一个值。
@@ -62,7 +67,14 @@ impl AtomicCounter {
         //     let new = current * multiplier;
         //     match self.compare_and_swap(current, new) { ... }
         // }
-        todo!()
+        loop {
+            let current = self.value.load(Ordering::Relaxed);
+            let new = current * multiplier;
+            match self.compare_and_swap(current, new) {
+                Ok(_) => return current,
+                Err(_) => {}
+            }
+        }
     }
 }
 
