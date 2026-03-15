@@ -27,10 +27,16 @@ use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 /// 最大并发读者数（适应状态位）
+/// xx111111 11111111 11111111 11111111
+/// 0 ~ 30位
 const READER_MASK: u32 = (1 << 30) - 1;
 /// 写者持有锁时设置的位。
+/// x1xxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
+/// 第 31 位
 const WRITER_HOLDING: u32 = 1 << 30;
 /// 至少有一个写者在等待时设置的位（写者优先：阻塞新读者）。
+/// 1xxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
+/// 第 32 位
 const WRITER_WAITING: u32 = 1 << 31;
 
 /// 写者优先读写锁。从零实现；不使用 `std::sync::RwLock`。
@@ -59,7 +65,21 @@ impl<T> RwLock<T> {
     /// 4. 尝试 compare_exchange(s, s + 1, AcqRel, Acquire)；成功则返回 RwLockReadGuard { lock: self }。
     pub fn read(&self) -> RwLockReadGuard<'_, T> {
         // TODO
-        todo!()
+        // todo!();
+        loop {
+            core::hint::spin_loop();
+            let state = self.state.load(Ordering::Acquire);
+            if state & (WRITER_HOLDING | WRITER_WAITING) != 0 || state & READER_MASK == READER_MASK
+            {
+                continue;
+            }
+            if let Ok(_) =
+                self.state
+                    .compare_exchange(state, state + 1, Ordering::AcqRel, Ordering::Acquire)
+            {
+                return RwLockReadGuard { lock: self };
+            }
+        }
     }
 
     /// 获取写锁。阻塞直到没有读者且没有其他写者。
@@ -71,7 +91,30 @@ impl<T> RwLock<T> {
     /// 4. 成功则返回 RwLockWriteGuard { lock: self }。
     pub fn write(&self) -> RwLockWriteGuard<'_, T> {
         // TODO
-        todo!()
+        self.state.fetch_or(WRITER_WAITING, Ordering::Release);
+        loop {
+            core::hint::spin_loop();
+            let state = self.state.load(Ordering::Acquire);
+            if state & (READER_MASK | WRITER_HOLDING) != 0 {
+                continue;
+            }
+
+            if let Ok(_) =
+                self.state
+                    .compare_exchange(0, WRITER_HOLDING, Ordering::AcqRel, Ordering::Acquire)
+            {
+                return RwLockWriteGuard { lock: self };
+            }
+
+            if let Ok(_) = self.state.compare_exchange(
+                WRITER_WAITING,
+                WRITER_HOLDING,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                return RwLockWriteGuard { lock: self };
+            }
+        }
     }
 }
 
@@ -86,7 +129,7 @@ impl<T> Deref for RwLockReadGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
-        todo!()
+        unsafe { &*self.lock.data.get() }
     }
 }
 
@@ -94,7 +137,7 @@ impl<T> Deref for RwLockReadGuard<'_, T> {
 // 递减读者计数：self.lock.state.fetch_sub(1, Ordering::Release)
 impl<T> Drop for RwLockReadGuard<'_, T> {
     fn drop(&mut self) {
-        todo!()
+        self.lock.state.fetch_sub(1, Ordering::Release);
     }
 }
 
@@ -109,7 +152,7 @@ impl<T> Deref for RwLockWriteGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
-        todo!()
+        unsafe { &*self.lock.data.get() }
     }
 }
 
@@ -117,7 +160,7 @@ impl<T> Deref for RwLockWriteGuard<'_, T> {
 // 返回可变引用：unsafe { &mut *self.lock.data.get() }
 impl<T> DerefMut for RwLockWriteGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut T {
-        todo!()
+        unsafe { &mut *self.lock.data.get() }
     }
 }
 
@@ -125,7 +168,9 @@ impl<T> DerefMut for RwLockWriteGuard<'_, T> {
 // 清除写者位使锁空闲：self.lock.state.fetch_and(!(WRITER_HOLDING | WRITER_WAITING), Ordering::Release)
 impl<T> Drop for RwLockWriteGuard<'_, T> {
     fn drop(&mut self) {
-        todo!()
+        self.lock
+            .state
+            .fetch_and(!(WRITER_WAITING | WRITER_HOLDING), Ordering::Release);
     }
 }
 

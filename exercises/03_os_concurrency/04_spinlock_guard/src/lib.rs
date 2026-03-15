@@ -41,7 +41,16 @@ impl<T> SpinLock<T> {
     pub fn lock(&self) -> SpinGuard<'_, T> {
         // TODO: 自旋等待获取锁
         // TODO: 返回 SpinGuard { lock: self }
-        todo!()
+        loop {
+            if let Ok(_) =
+                self.locked
+                    .compare_exchange(false, true, Ordering::Release, Ordering::Relaxed)
+            {
+                return SpinGuard { lock: self };
+            } else {
+                core::hint::spin_loop();
+            }
+        }
     }
 }
 
@@ -51,7 +60,15 @@ impl<T> Deref for SpinGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
-        todo!()
+        // 下面是错误写法：
+        //
+        // unsafe { &self.lock.data.get().read() };
+        //
+        // 这创建了一个临时值，离开作用域时被丢弃；
+        //
+        // 而 as_ref / as_mut 是从裸指针创建一个 T 类型的引用，
+        // 不会创建值的副本
+        unsafe { self.lock.data.get().as_ref().unwrap() }
     }
 }
 
@@ -59,7 +76,7 @@ impl<T> Deref for SpinGuard<'_, T> {
 // 返回 &mut T
 impl<T> DerefMut for SpinGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut T {
-        todo!()
+        unsafe { self.lock.data.get().as_mut().unwrap() }
     }
 }
 
@@ -67,7 +84,18 @@ impl<T> DerefMut for SpinGuard<'_, T> {
 // 将 lock.locked 设置为 false（使用 Release 顺序）
 impl<T> Drop for SpinGuard<'_, T> {
     fn drop(&mut self) {
-        todo!()
+        loop {
+            if let Ok(_) = self.lock.locked.compare_exchange_weak(
+                true,
+                false,
+                Ordering::Release,
+                Ordering::Relaxed,
+            ) {
+                return;
+            } else {
+                core::hint::spin_loop();
+            }
+        }
     }
 }
 
