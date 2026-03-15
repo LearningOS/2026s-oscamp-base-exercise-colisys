@@ -41,7 +41,21 @@ impl<T> SpinLock<T> {
     /// 调用者必须确保在使用完数据后调用 `unlock`。
     pub fn lock(&self) -> &mut T {
         // TODO
-        todo!()
+        // todo!();
+        // if self.locked.load(Ordering::SeqCst) {
+        //     return unsafe { &mut *self.data.get() };
+        // }
+
+        loop {
+            if let Ok(_) =
+                self.locked
+                    .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            {
+                return unsafe { &mut *self.data.get() };
+            } else {
+                core::hint::spin_loop();
+            }
+        }
     }
 
     /// 释放锁。
@@ -49,14 +63,36 @@ impl<T> SpinLock<T> {
     /// TODO: 将 locked 设置为 false（使用 Release 顺序）
     pub fn unlock(&self) {
         // TODO
-        todo!()
+        // todo!()
+        // if !self.locked.load(Ordering::SeqCst) {
+        //     return;
+        // }
+
+        loop {
+            if let Ok(_) =
+                self.locked
+                    .compare_exchange(true, false, Ordering::Acquire, Ordering::Relaxed)
+            {
+                return;
+            } else {
+                core::hint::spin_loop();
+            }
+        }
     }
 
     /// 尝试获取锁而不自旋。
     /// 成功返回 Some(&mut T)，锁忙时返回 None。
     pub fn try_lock(&self) -> Option<&mut T> {
         // TODO: 单次 compare_exchange 尝试
-        todo!()
+        // todo!()
+        if let Ok(_) =
+            self.locked
+                .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+        {
+            unsafe { Some(&mut *self.data.get()) }
+        } else {
+            None
+        }
     }
 }
 

@@ -40,7 +40,9 @@ impl FlagChannel {
     pub fn produce(&self, value: u32) {
         // TODO: 存储数据（选择合适的 Ordering）
         // TODO: 设置 ready = true（选择合适的 Ordering，确保数据写入在此之前完成）
-        todo!()
+        // todo!()
+        self.ready.store(true, Ordering::Relaxed);
+        self.data.store(value, Ordering::Release);
     }
 
     /// 消费者：自旋等待 ready 标志，然后读取数据。
@@ -51,7 +53,9 @@ impl FlagChannel {
     pub fn consume(&self) -> u32 {
         // TODO: 自旋等待 ready 变为 true（选择合适的 Ordering）
         // TODO: 读取数据（选择合适的 Ordering）
-        todo!()
+        // todo!()
+        while !self.ready.load(Ordering::Acquire) {}
+        self.data.load(Ordering::Relaxed)
     }
 
     /// 重置通道状态
@@ -83,13 +87,26 @@ impl OnceCell {
     pub fn init(&self, val: u32) -> bool {
         // TODO: 使用 compare_exchange 确保只初始化一次
         // 成功时存储值
-        todo!()
+        if let Ok(_) =
+            self.initialized
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::Relaxed)
+        {
+            self.value.store(val, Ordering::Release);
+            true
+        } else {
+            false
+        }
     }
 
     /// 获取值。如果已初始化返回 Some，否则返回 None。
     pub fn get(&self) -> Option<u32> {
         // TODO: 检查 initialized 标志，然后读取值
-        todo!()
+        // todo!()
+        if self.initialized.load(Ordering::Acquire) {
+            Some(self.value.load(Ordering::Relaxed))
+        } else {
+            None
+        }
     }
 }
 
