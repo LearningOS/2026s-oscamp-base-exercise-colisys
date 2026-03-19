@@ -62,7 +62,10 @@ impl TaskContext {
     /// - 设置 `sp = stack_top`，16 字节对齐（RISC-V ABI 要求函数入口处栈 16 字节对齐）。
     /// - `s0`–`s11` 保持零；它们会在切换时被加载。
     pub fn init(&mut self, stack_top: usize, entry: usize) {
-        todo!("设置 ra = entry, sp = stack_top（16 字节对齐）")
+        //todo!("设置 ra = entry, sp = stack_top（16 字节对齐）");
+        self.ra = entry as u64;
+        // 低 16 位硬连线
+        self.sp = stack_top & (!0xF) as u64;
     }
 }
 

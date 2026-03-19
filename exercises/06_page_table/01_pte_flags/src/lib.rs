@@ -58,7 +58,8 @@ const PPN_MASK: u64 = (1u64 << 44) - 1; // 44 位 PPN
 /// 提示：将 PPN 左移 PPN_SHIFT 位，然后与标志位 OR。
 pub fn make_pte(ppn: u64, flags: u64) -> u64 {
     // TODO: 使用 ppn 和 flags 构造页表项
-    todo!()
+    // todo!();
+    (ppn << PPN_SHIFT) | (flags & ((1 << 8) - 1))
 }
 
 /// 从页表项提取物理页号（PPN）。
@@ -66,19 +67,20 @@ pub fn make_pte(ppn: u64, flags: u64) -> u64 {
 /// 提示：右移 PPN_SHIFT 位，然后与 PPN_MASK 做 AND。
 pub fn extract_ppn(pte: u64) -> u64 {
     // TODO: 从 pte 提取 PPN
-    todo!()
+    // todo!();
+    (pte >> PPN_SHIFT) & PPN_MASK
 }
 
 /// 从页表项提取标志位（低 8 位）。
 pub fn extract_flags(pte: u64) -> u64 {
     // TODO: 提取低 8 位标志
-    todo!()
+    pte & ((1 << 8) - 1)
 }
 
 /// 检查页表项是否有效（V 位是否设置）。
 pub fn is_valid(pte: u64) -> bool {
     // TODO: 检查 PTE_V
-    todo!()
+    (pte & PTE_V) > 0
 }
 
 /// 判断页表项是否为叶子 PTE。
@@ -87,7 +89,8 @@ pub fn is_valid(pte: u64) -> bool {
 /// 指向最终的物理页。否则它指向下一级页表。
 pub fn is_leaf(pte: u64) -> bool {
     // TODO: 检查 R/W/X 位是否有任意位被设置
-    todo!()
+    // todo!()
+    (pte & (PTE_R | PTE_W | PTE_X)) > 0
 }
 
 /// 根据给定的权限检查页表项是否允许请求的访问。
@@ -99,7 +102,24 @@ pub fn is_leaf(pte: u64) -> bool {
 /// 当且仅当：PTE 有效，且每个请求的权限都满足时返回 true。
 pub fn check_permission(pte: u64, read: bool, write: bool, execute: bool) -> bool {
     // TODO: 首先检查是否有效，然后检查每个请求的权限
-    todo!()
+    // todo!()
+    if !is_valid(pte) {
+        return false;
+    }
+
+    if read && ((pte & PTE_R) == 0) {
+        return false;
+    }
+
+    if write && ((pte & PTE_W) == 0) {
+        return false;
+    }
+
+    if execute && ((pte & PTE_X) == 0) {
+        return false;
+    }
+
+    true
 }
 
 #[cfg(test)]

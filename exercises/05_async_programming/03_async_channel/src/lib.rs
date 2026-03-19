@@ -19,7 +19,29 @@ pub async fn producer_consumer(items: Vec<String>) -> Vec<String> {
     // TODO: 派生生产者任务：遍历 items，发送每一个
     // TODO: 派生消费者任务：循环 recv 直到通道关闭，收集结果
     // TODO: 等待消费者完成并返回结果
-    todo!()
+    // todo!();
+
+    let (tx, mut rx) = mpsc::channel(items.len().max(1));
+
+    tokio::spawn(async move {
+        for item in items {
+            tx.send(item).await.unwrap();
+        }
+        drop(tx);
+    })
+    .await
+    .unwrap();
+
+    tokio::spawn(async move {
+        let mut result = vec![];
+        while let Some(item) = rx.recv().await {
+            result.push(item);
+        }
+        drop(rx);
+        result
+    })
+    .await
+    .unwrap()
 }
 
 /// 扇入模式：多个生产者，一个消费者。
@@ -31,7 +53,31 @@ pub async fn fan_in(n_producers: usize) -> Vec<String> {
     //       每个发送 format!("producer {id}: message")
     // TODO: 丢弃原始发送者（重要！否则通道不会关闭）
     // TODO: 消费者循环接收，收集并排序
-    todo!()
+    // todo!()
+    let (tx, mut rx) = mpsc::channel(n_producers.max(1));
+
+    for id in 0..n_producers {
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            tx.send(format!("producer {id}: message")).await.unwrap();
+        })
+        .await
+        .unwrap();
+    }
+    drop(tx);
+
+    let mut result = tokio::spawn(async move {
+        let mut result = vec![];
+        while let Some(item) = rx.recv().await {
+            result.push(item);
+        }
+        drop(rx);
+        result
+    })
+    .await
+    .unwrap();
+    result.sort();
+    result
 }
 
 #[cfg(test)]

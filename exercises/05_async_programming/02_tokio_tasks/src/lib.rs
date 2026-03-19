@@ -17,7 +17,12 @@ pub async fn concurrent_squares(n: usize) -> Vec<usize> {
     // TODO: 创建 n 个异步任务，每个计算 i * i
     // TODO: 收集所有 JoinHandle
     // TODO: 依次 await 获取结果
-    todo!()
+    // todo!();
+    let mut result = vec![];
+    for i in 0..n {
+        result.push(tokio::spawn(async move { i * i }).await.unwrap())
+    }
+    result
 }
 
 /// 并发执行多个"耗时"任务（用 sleep 模拟），返回所有结果。
@@ -28,7 +33,20 @@ pub async fn parallel_sleep_tasks(n: usize, duration_ms: u64) -> Vec<usize> {
     // TODO: 为 0..n 中的每个 id 创建异步任务
     // TODO: 每个任务休眠指定时长并返回自己的 id
     // TODO: 收集所有结果并排序
-    todo!()
+    // todo!();
+    let mut result = vec![];
+    for i in 0..n {
+        result.push(
+            tokio::spawn(async move {
+                sleep(Duration::from_micros(duration_ms)).await;
+                i
+            })
+            .await
+            .unwrap(),
+        );
+    }
+    result.sort();
+    result
 }
 
 #[cfg(test)]

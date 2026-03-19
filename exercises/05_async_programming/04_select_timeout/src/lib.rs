@@ -8,7 +8,10 @@
 //! - 最先完成的分支被执行，其他分支被取消
 
 use std::future::Future;
-use tokio::time::{sleep, Duration};
+use tokio::{
+    select,
+    time::{sleep, Duration},
+};
 
 /// 带超时的异步操作。
 /// 如果 `future` 在 `timeout_ms` 毫秒内完成，返回 Some(result)。
@@ -21,7 +24,11 @@ where
 {
     // TODO: 使用 tokio::select! 让 future 和 sleep 竞争
     // 或使用 tokio::time::timeout
-    todo!()
+    // todo!()
+    select! {
+        t = future => Some(t),
+        _ = sleep(Duration::from_micros(timeout_ms)) => None,
+    }
 }
 
 /// 让两个异步任务竞争，返回先完成的结果。
@@ -34,7 +41,11 @@ where
 {
     // TODO: 使用 tokio::select! 等待 f1 和 f2
     // 返回先完成的结果
-    todo!()
+    // todo!()
+    select! {
+        t = f1 => t,
+        t = f2 => t
+    }
 }
 
 #[cfg(test)]
