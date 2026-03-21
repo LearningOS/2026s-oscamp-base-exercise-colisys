@@ -14,7 +14,7 @@
 //! 调度器在就绪线程间轮转。用户入口被 `thread_wrapper` 包装，后者
 //! 调用入口然后将线程标记为 `Finished` 并切换回去。
 
-// #![cfg(target_arch = "riscv64")]
+#![cfg(target_arch = "riscv64")]
 
 use core::arch::naked_asm;
 
@@ -113,7 +113,6 @@ unsafe extern "C" fn switch_context(_old: &mut TaskContext, _new: &TaskContext) 
 pub struct Scheduler {
     threads: Vec<GreenThread>,
     current: usize,
-    task_bits: u64,
 }
 
 impl Scheduler {
@@ -128,7 +127,6 @@ impl Scheduler {
         Self {
             threads: vec![main_thread],
             current: 0,
-            task_bits: 0,
         }
     }
 
@@ -161,8 +159,6 @@ impl Scheduler {
         };
 
         self.threads.push(thread);
-        // 更新任务位图（可选，这里我们不需要它来调度）
-        self.task_bits |= 1 << (self.threads.len() - 1);
     }
 
     /// 运行调度器直到所有线程（除主线程外）都 `Finished`。
@@ -209,7 +205,10 @@ impl Scheduler {
         // 查找下一个就绪线程
         let mut next_idx = current_idx;
         for i in 1..thread_count {
+            // 从当前位置，环回寻找就绪线程，包括主线程
             let idx = (current_idx + i) % thread_count;
+            // println!("idx: {}", idx);
+            // 若找到则设置下一个线程的索引
             if self.threads[idx].state == ThreadState::Ready {
                 next_idx = idx;
                 break;

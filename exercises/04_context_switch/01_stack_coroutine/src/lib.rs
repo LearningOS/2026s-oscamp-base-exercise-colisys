@@ -14,7 +14,7 @@
 //! - 第一和第二个参数：`a0`（旧上下文）、`a1`（新上下文）。
 
 #![cfg(target_arch = "riscv64")]
-#![feature(naked_functions_rustic_abi)]
+// #![feature(naked_functions_rustic_abi)]
 
 /// 一个任务的保存寄存器状态（riscv64）。布局必须与下面汇编中使用的偏移量匹配：
 /// `sp` 在 0，`ra` 在 8，然后 `s0`–`s11` 在 16, 24, … 104。
@@ -63,11 +63,11 @@ impl TaskContext {
     /// - 设置 `sp = stack_top`，16 字节对齐（RISC-V ABI 要求函数入口处栈 16 字节对齐）。
     /// - `s0`–`s11` 保持零；它们会在切换时被加载。
     pub fn init(&mut self, stack_top: usize, entry: usize) {
-        println!("sp:{}", stack_top);
+        // println!("sp:{}", stack_top);
         //todo!("设置 ra = entry, sp = stack_top（16 字节对齐）");
         self.ra = entry as u64;
-        // 低 4 位硬连线，像 arm 的 pc；log2(16) = 4
-        self.sp = ((stack_top as u64) >> 4) << 4;
+        let aligned_stack_top = (stack_top - 16) & !15;
+        self.sp = aligned_stack_top as u64;
     }
 }
 
@@ -77,7 +77,7 @@ impl TaskContext {
 ///
 /// 必须是 `#[unsafe(naked)]` 以防止编译器生成序言/尾声。
 #[unsafe(naked)]
-pub unsafe fn switch_context(old: &mut TaskContext, new: &TaskContext) {
+pub unsafe extern "C" fn switch_context(old: &mut TaskContext, new: &TaskContext) {
     // todo!("将被调用者保存寄存器保存到 old，从 new 加载，然后 ret；使用 #[unsafe(naked)] + naked_asm!，参见模块文档了解 riscv64 ABI 和布局")
 
     //
