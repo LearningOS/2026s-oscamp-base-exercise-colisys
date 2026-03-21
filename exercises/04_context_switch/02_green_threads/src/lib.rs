@@ -229,6 +229,7 @@ impl Scheduler {
         self.threads[next_idx].state = ThreadState::Running;
 
         // 设置下一个线程的入口（如果是首次运行）
+        // 非首次运行，线程的上下文会携带有信息
         if let Some(entry) = self.threads[next_idx].entry.take() {
             unsafe {
                 CURRENT_THREAD_ENTRY = Some(entry);
@@ -289,16 +290,24 @@ mod tests {
 
     static EXEC_ORDER: AtomicU32 = AtomicU32::new(0);
 
+    // 第二个线程
     extern "C" fn task_a() {
+        // 1. 主线程通过 run 调度到这里，主线程换出上下文，线程 a 得到调度
         EXEC_ORDER.fetch_add(1, Ordering::SeqCst);
+        // 2. 主动出让，上下文被换出
         yield_now();
+        // 5. 主线程检查任务没有完成，于是继续执行调度，切换到线程 a 的上下文
         EXEC_ORDER.fetch_add(10, Ordering::SeqCst);
         yield_now();
         EXEC_ORDER.fetch_add(100, Ordering::SeqCst);
     }
 
+    // 第三个线程
     extern "C" fn task_b() {
+        // 3. 上下文被切入
         EXEC_ORDER.fetch_add(1, Ordering::SeqCst);
+        // 4. 主动出让，上下文被换出，此时到达了list的末尾，环回到开头
+        // 主线程得的上下文被切入
         yield_now();
         EXEC_ORDER.fetch_add(10, Ordering::SeqCst);
     }
@@ -311,6 +320,7 @@ mod tests {
         let mut sched = Scheduler::new();
         sched.spawn(task_a);
         sched.spawn(task_b);
+        // 0. 启动，主线程算是第一个线程
         sched.run();
 
         let got = EXEC_ORDER.load(Ordering::SeqCst);
