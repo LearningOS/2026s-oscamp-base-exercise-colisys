@@ -142,6 +142,7 @@ impl Sv39PageTable {
         }
 
         // 假设有一地址：0x1000
+        // 38     30 29     21 20     12 11         0
         // 000000000 000000000 000000000 000000000000
         // level1    level2    level3    offset
         // 忽略掉 offset
@@ -174,7 +175,7 @@ impl Sv39PageTable {
         // 页表要从 self.nodes 中取
         // 取到最后一层页表的时候，就可以写入映射
 
-        // // va 已经通过 extract_vpn 去除了 offset
+        // // va 已经通过 extract_vpn 去除了 offset，建立映射的时候无需保存
         // let vpn_v2 = Self::extract_vpn(va, 2);
         // // 获取 lv2 的页表
         // let node_v2 = self.nodes.get_mut(&self.root_ppn).unwrap();

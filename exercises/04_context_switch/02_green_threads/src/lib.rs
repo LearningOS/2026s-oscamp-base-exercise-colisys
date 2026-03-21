@@ -14,7 +14,7 @@
 //! 调度器在就绪线程间轮转。用户入口被 `thread_wrapper` 包装，后者
 //! 调用入口然后将线程标记为 `Finished` 并切换回去。
 
-#![cfg(target_arch = "riscv64")]
+// #![cfg(target_arch = "riscv64")]
 
 use core::arch::naked_asm;
 
@@ -113,6 +113,7 @@ unsafe extern "C" fn switch_context(_old: &mut TaskContext, _new: &TaskContext) 
 pub struct Scheduler {
     threads: Vec<GreenThread>,
     current: usize,
+    task_bits: u64,
 }
 
 impl Scheduler {
@@ -127,6 +128,7 @@ impl Scheduler {
         Self {
             threads: vec![main_thread],
             current: 0,
+            task_bits: 0,
         }
     }
 
@@ -137,7 +139,30 @@ impl Scheduler {
     ///    `sp` 必须 16 字节对齐（例如 `(stack_top - 16) & !15` 以留出余量）。
     /// 3. 推入一个 `GreenThread`，包含此上下文、状态 `Ready`，以及存储的 `entry` 供包装函数调用。
     pub fn spawn(&mut self, entry: extern "C" fn()) {
-        todo!("分配栈，初始化 ctx（ra=thread_wrapper，sp 对齐），推入 GreenThread(Ready, entry)")
+        // todo!("分配栈，初始化 ctx（ra=thread_wrapper，sp 对齐），推入 GreenThread(Ready, entry)")
+        // 分配栈
+        let mut stack = vec![0u8; STACK_SIZE];
+        let stack_top = stack.as_mut_ptr() as usize + STACK_SIZE;
+
+        // 确保栈顶16字节对齐（RISC-V ABI要求）
+        let aligned_stack_top = (stack_top - 16) & !15;
+
+        // 初始化任务上下文
+        let mut ctx = TaskContext::default();
+        ctx.sp = aligned_stack_top as u64;
+        ctx.ra = thread_wrapper as *const () as u64;
+
+        // 创建绿色线程
+        let thread = GreenThread {
+            ctx,
+            state: ThreadState::Ready,
+            _stack: Some(stack),
+            entry: Some(entry),
+        };
+
+        self.threads.push(thread);
+        // 更新任务位图（可选，这里我们不需要它来调度）
+        self.task_bits |= 1 << (self.threads.len() - 1);
     }
 
     /// 运行调度器直到所有线程（除主线程外）都 `Finished`。
@@ -146,12 +171,80 @@ impl Scheduler {
     /// 2. 循环：如果 `threads[1..]` 全部 `Finished` 则退出；否则调用 `schedule_next()`（可能切换走后再返回）。
     /// 3. 完成后清除 `SCHEDULER`。
     pub fn run(&mut self) {
-        todo!("将 SCHEDULER 设为 self，循环直到 threads[1..] 全部 Finished，调用 schedule_next，然后清除 SCHEDULER")
+        // todo!("将 SCHEDULER 设为 self，循环直到 threads[1..] 全部 Finished，调用 schedule_next，然后清除 SCHEDULER")
+        // 设置全局调度器指针
+        unsafe {
+            SCHEDULER = self as *mut Scheduler;
+        }
+
+        // 循环直到所有用户线程完成
+        loop {
+            // 检查是否所有用户线程都已完成
+            let all_finished = self.threads[1..]
+                .iter()
+                .all(|t| t.state == ThreadState::Finished);
+
+            if all_finished {
+                break;
+            }
+
+            // 调度下一个线程
+            self.schedule_next();
+        }
+
+        // 清除全局调度器指针
+        unsafe {
+            SCHEDULER = std::ptr::null_mut();
+        }
     }
 
     /// 找到下一个就绪线程（从 `current + 1` 开始轮转），将当前标记为 `Ready`（如果未 `Finished`），将下一个标记为 `Running`，如果下一个线程有入口则设置 `CURRENT_THREAD_ENTRY`，然后切换到它。
     fn schedule_next(&mut self) {
-        todo!("轮转查找下一个 Ready，将当前设为 Ready（如未 Finished），下一个设为 Running，设置 CURRENT_THREAD_ENTRY，然后 switch_context")
+        // todo!("轮转查找下一个 Ready，将当前设为 Ready（如未 Finished），下一个设为 Running，设置 CURRENT_THREAD_ENTRY，然后 switch_context")
+        let thread_count = self.threads.len();
+
+        // 保存当前线程索引
+        let current_idx = self.current;
+
+        // 查找下一个就绪线程
+        let mut next_idx = current_idx;
+        for i in 1..thread_count {
+            let idx = (current_idx + i) % thread_count;
+            if self.threads[idx].state == ThreadState::Ready {
+                next_idx = idx;
+                break;
+            }
+        }
+
+        // 如果没有找到就绪线程，返回
+        if next_idx == current_idx {
+            return;
+        }
+
+        // 更新当前线程状态（如果不是Finished）
+        if self.threads[current_idx].state == ThreadState::Running {
+            self.threads[current_idx].state = ThreadState::Ready;
+        }
+
+        // 更新下一个线程状态
+        self.threads[next_idx].state = ThreadState::Running;
+
+        // 设置下一个线程的入口（如果是首次运行）
+        if let Some(entry) = self.threads[next_idx].entry.take() {
+            unsafe {
+                CURRENT_THREAD_ENTRY = Some(entry);
+            }
+        }
+
+        // 更新当前线程索引
+        self.current = next_idx;
+
+        // 执行上下文切换
+        unsafe {
+            let old_ctx = &mut *self.threads[current_idx].ctx.as_mut_ptr();
+            let new_ctx = &*self.threads[next_idx].ctx.as_ptr();
+            switch_context(old_ctx, new_ctx);
+        }
     }
 }
 
@@ -234,6 +327,7 @@ mod tests {
 
     extern "C" fn simple_task() {
         SIMPLE_FLAG.store(42, Ordering::SeqCst);
+        println!("I got dispatched!");
     }
 
     #[test]

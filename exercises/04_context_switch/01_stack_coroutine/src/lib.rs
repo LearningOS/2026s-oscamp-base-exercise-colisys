@@ -14,6 +14,7 @@
 //! - 第一和第二个参数：`a0`（旧上下文）、`a1`（新上下文）。
 
 #![cfg(target_arch = "riscv64")]
+#![feature(naked_functions_rustic_abi)]
 
 /// 一个任务的保存寄存器状态（riscv64）。布局必须与下面汇编中使用的偏移量匹配：
 /// `sp` 在 0，`ra` 在 8，然后 `s0`–`s11` 在 16, 24, … 104。
@@ -62,10 +63,11 @@ impl TaskContext {
     /// - 设置 `sp = stack_top`，16 字节对齐（RISC-V ABI 要求函数入口处栈 16 字节对齐）。
     /// - `s0`–`s11` 保持零；它们会在切换时被加载。
     pub fn init(&mut self, stack_top: usize, entry: usize) {
+        println!("sp:{}", stack_top);
         //todo!("设置 ra = entry, sp = stack_top（16 字节对齐）");
         self.ra = entry as u64;
-        // 低 16 位硬连线
-        self.sp = stack_top & (!0xF) as u64;
+        // 低 4 位硬连线，像 arm 的 pc；log2(16) = 4
+        self.sp = ((stack_top as u64) >> 4) << 4;
     }
 }
 
@@ -74,8 +76,67 @@ impl TaskContext {
 /// 在汇编中：将 `sp`、`ra`、`s0`–`s11` 存储到 `[a0]`（old），从 `[a1]`（new）加载，将 `a0`/`a1` 清零以免向新上下文泄漏指针，然后 `ret`。
 ///
 /// 必须是 `#[unsafe(naked)]` 以防止编译器生成序言/尾声。
+#[unsafe(naked)]
 pub unsafe fn switch_context(old: &mut TaskContext, new: &TaskContext) {
-    todo!("将被调用者保存寄存器保存到 old，从 new 加载，然后 ret；使用 #[unsafe(naked)] + naked_asm!，参见模块文档了解 riscv64 ABI 和布局")
+    // todo!("将被调用者保存寄存器保存到 old，从 new 加载，然后 ret；使用 #[unsafe(naked)] + naked_asm!，参见模块文档了解 riscv64 ABI 和布局")
+
+    //
+    // Loads and Stores
+    // (l)oad   (b)yte/(h)alfword/(w)ord
+    // (s)tore  (b)yte/(h)alfword/(w)ord
+    //
+    // asm 写法：
+    // asm! (
+    //   "assembly code",
+    //   [in/out/inout/lateout] (reg) {variable} => {variable},
+    // )
+    //
+    // 因为这里是 64 位，所以用 sd 指令
+    // sd rs2, offset(rs1); rs2 -> [rs1] + #offset;
+
+    core::arch::naked_asm!(
+        r#"sd sp, 0(a0);
+        sd ra, 8(a0);
+        sd s0, 16(a0);
+        sd s1, 24(a0);
+        sd s2, 32(a0);
+        sd s3, 40(a0);
+        sd s4, 48(a0);
+        sd s5, 56(a0);
+        sd s6, 64(a0);
+        sd s7, 72(a0);
+        sd s8, 80(a0);
+        sd s9, 88(a0);
+        sd s10, 96(a0);
+        sd s11, 104(a0);
+
+        # 这里用 ld 指令加载双字
+        # ld rd, offset(rs1); rd <- [rs1] + #offset
+
+        ld sp, 0(a1);
+        ld ra, 8(a1);
+        ld s0, 16(a1);
+        ld s1, 24(a1);
+        ld s2, 32(a1);
+        ld s3, 40(a1);
+        ld s4, 48(a1);
+        ld s5, 56(a1);
+        ld s6, 64(a1);
+        ld s7, 72(a1);
+        ld s8, 80(a1);
+        ld s9, 88(a1);
+        ld s10, 96(a1);
+        ld s11, 104(a1);
+
+        # 清除 a0, a1
+
+        xor a0, a0, a0;
+        xor a1, a1, a1;
+
+        # 执行 ret，此时上下文已经换成 new 里面的了
+
+        ret"#
+    );
 }
 
 const STACK_SIZE: usize = 1024 * 64;
@@ -83,7 +144,11 @@ const STACK_SIZE: usize = 1024 * 64;
 /// 为协程分配栈。返回 `(buffer, stack_top)`，其中 `stack_top` 是高地址（栈向下增长）。
 /// buffer 必须在使用此栈的上下文生命周期内保持有效。
 pub fn alloc_stack() -> (Vec<u8>, usize) {
-    todo!("分配栈缓冲区，返回 (buffer, stack_top)，其中 stack_top 16 字节对齐")
+    // todo!("分配栈缓冲区，返回 (buffer, stack_top)，其中 stack_top 16 字节对齐")
+    let buf = vec![0u8; STACK_SIZE];
+
+    let raw_pointer = buf.as_ptr() as usize;
+    (buf, raw_pointer + STACK_SIZE)
 }
 
 #[cfg(test)]
