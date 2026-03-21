@@ -19,6 +19,39 @@
 //! └──────────┴───────────┴───────────┴───────────┘
 //! ```
 
+//! 1.  **根页表基址**：
+//!     *   CPU 的 `satp`（Supervisor Address Translation and Protection）寄存器保存了当前进程的**根页表（一级页表）的物理页号（PPN）** 以及模式位（如 `satp.MODE = sv39`）。
+//!
+//! 2.  **第一级查找**：
+//!     *   取虚拟地址的 `VPN[2]`（高 9 位）作为索引。
+//!     *   在 `satp.PPN` 指向的物理页（一级页表）中，找到第 `VPN[2]` 个 PTE。
+//!     *   检查该 PTE：`V=1`，且 `R=0, W=0, X=0`（表示它指向一个二级页表，而不是一个叶子页）。
+//!     *   从该 PTE 中取出 `PPN`，这就是**二级页表的物理基地址**。
+//!
+//! 3.  **第二级查找**：
+//!     *   取虚拟地址的 `VPN[1]`（中间 9 位）作为索引。
+//!     *   在上一步得到的二级页表物理页中，找到第 `VPN[1]` 个 PTE。
+//!     *   同样检查有效性，并确认它指向三级页表。
+//!     *   取出 `PPN`，得到**三级页表的物理基地址**。
+//!
+//! 4.  **第三级查找（最终页）**：
+//!     *   取虚拟地址的 `VPN[0]`（低 9 位）作为索引。
+//!     *   在三级页表物理页中，找到第 `VPN[0]` 个 PTE。
+//!     *   此时，这个 PTE 应该是一个**叶子 PTE**，即 `R/W/X` 至少有一位为 1，表示它直接映射到一个 4 KiB 的物理数据页。
+//!     *   从该 PTE 中取出最终的 `PPN`。
+//!
+//! 5.  **合成物理地址**：
+//!     *   将最终 PTE 中的 `PPN`（44 位）与虚拟地址中的 **12 位页内偏移** 拼接起来，就得到了完整的 **56 位物理地址**。
+//!
+
+//! 虚拟地址: [VPN[2]] [VPN[1]] [VPN[0]] [页内偏移]
+//!               |         |        |
+//!               v         v        v
+//! satp.PPN -> 一级页表 -> 二级页表 -> 三级页表（叶子PTE）
+//!                                          |
+//!                                          v
+//! 物理地址: [从叶子PTE取出的PPN] + [页内偏移]
+
 use std::collections::HashMap;
 
 /// 页大小 4KB
@@ -103,7 +136,23 @@ impl Sv39PageTable {
     /// 提示：右移 (12 + level * 9) 位，然后与 0x1FF 做掩码。
     pub fn extract_vpn(va: u64, level: usize) -> usize {
         // TODO: 从虚拟地址中提取指定级别的 VPN 索引
-        todo!()
+        // todo!()
+        if level > 2 {
+            panic!("Level should not over 2");
+        }
+
+        // 假设有一地址：0x1000
+        // 000000000 000000000 000000000 000000000000
+        // level1    level2    level3    offset
+        // 忽略掉 offset
+
+        // let va = va >> 12;
+        // let va = va >> level * 9;
+        // // 移位可能要考虑一下左侧推入的数字，所以取9位做与运算
+        // // 1 11111111
+        // let va = va & 0b1_11111111;
+
+        (va >> (12 + level * 9) & 0x1FF) as usize
     }
 
     /// 建立从虚拟页到物理页的映射（4KB 页）。
@@ -119,7 +168,88 @@ impl Sv39PageTable {
         // 对于中间层级（level 2 和 level 1），如果对应 VPN 的页表项（PTE）无效（PTE_V == 0），
         // 则需要分配一个新的页表节点（使用 alloc_node），并将新节点的 PPN 写入当前 PTE（仅设置 PTE_V 标志）。
         // 最后在 level 0 的 PTE 中写入目标物理页号（pa >> 12）和 flags。
-        todo!()
+        // todo!()
+
+        // va 中的都是关于页表的索引
+        // 页表要从 self.nodes 中取
+        // 取到最后一层页表的时候，就可以写入映射
+
+        // // va 已经通过 extract_vpn 去除了 offset
+        // let vpn_v2 = Self::extract_vpn(va, 2);
+        // // 获取 lv2 的页表
+        // let node_v2 = self.nodes.get_mut(&self.root_ppn).unwrap();
+        // // ptr_to_v1 是指向一级页表的指针
+        // let ptr_to_v1 = {
+        //     let mut pte = node_v2.entries[vpn_v2];
+        //     if pte & PTE_V == 0 {
+        //         node_v2.entries[vpn_v2] = (self.next_ppn << PPN_SHIFT) | PTE_V;
+        //         self.alloc_node();
+        //         pte = self.next_ppn - 1;
+        //     }
+        //     pte
+        // };
+
+        // let vpn_v1 = Self::extract_vpn(va, 1);
+        // let node_v1 = self.nodes.get_mut(&ptr_to_v1).unwrap();
+        // // ptr_to_v0 是指向零级页面的指针
+        // let ptr_to_v0 = {
+        //     let mut pte = node_v1.entries[vpn_v1];
+        //     if pte & PTE_V == 0 {
+        //         node_v1.entries[vpn_v1] = (self.next_ppn << PPN_SHIFT) | PTE_V;
+        //         self.alloc_node();
+        //         pte = self.next_ppn - 1;
+        //     }
+        //     pte
+        // };
+
+        // let vpn_v0 = Self::extract_vpn(va, 0);
+        // let node_v0 = self.nodes.get_mut(&ptr_to_v0).unwrap();
+        // let pte = node_v0.entries[vpn_v0];
+
+        // if pte & PTE_V == 0 {
+        //     node_v0.entries[vpn_v0] = ((pa >> 12) << PPN_SHIFT) | flags;
+        // }
+
+        let mut current_ppn = self.root_ppn;
+        println!("current_ppn:{}", current_ppn);
+        for level in (0..=2).rev() {
+            let vpn = Self::extract_vpn(va, level);
+
+            let node = self.nodes.get_mut(&current_ppn).unwrap();
+            let pte = node.entries[vpn];
+
+            println!("level:{}, vpn:{}, pte:{}", level, vpn, pte);
+
+            if level == 0 {
+                // 首先要对 pa 做低位对齐，有点像 arm 里面的硬连线
+                // 然后对中间结果转换成 ppn
+                let pa_base = pa >> 12;
+                let ppn_base = pa_base << PPN_SHIFT;
+                // 对 flags 做处理，使其保留的二进制位数不大于提供的长度
+                let flags = flags & ((1 << PPN_SHIFT) - 1);
+                // 拼装地址，然后写入
+                let addr = ppn_base | flags;
+                node.entries[vpn] = addr;
+                println!(
+                    "write 0x{:x} to {}[{}], pa(trimed): 0x{:x}, flag: 0x{:x}",
+                    addr,
+                    current_ppn,
+                    vpn,
+                    (pa >> 12),
+                    flags
+                );
+                return;
+            } else {
+                if pte & PTE_V == 0 {
+                    node.entries[vpn] = (self.next_ppn << PPN_SHIFT) | PTE_V;
+                    self.alloc_node();
+                    current_ppn = self.next_ppn - 1;
+                } else {
+                    current_ppn = pte >> PPN_SHIFT;
+                }
+                println!("current_ppn: {}", current_ppn);
+            }
+        }
     }
 
     /// 遍历三级页表，将虚拟地址翻译为物理地址。
@@ -141,7 +271,45 @@ impl Sv39PageTable {
         // 如果 PTE 是叶节点（即 R、W、X 标志位中有至少一个被置位），则可以直接使用该 PTE 中的物理页号（PPN）计算最终的物理地址。
         // 否则，该 PTE 指向下一级页表节点，继续遍历下一级。
         // 遍历到 level 0 时，PTE 必须是叶节点。
-        todo!()
+        // todo!()
+
+        let mut current_ppn = self.root_ppn;
+        println!("current_ppn:{}", current_ppn);
+        for level in (0..=2).rev() {
+            let vpn = Self::extract_vpn(va, level);
+
+            let node = self.nodes.get(&current_ppn).unwrap();
+            let pte = node.entries[vpn];
+
+            println!("level:{}, vpn:{}, pte:{}", level, vpn, pte);
+
+            if pte & (PTE_R | PTE_W | PTE_X) != 0 {
+                // 倘若叶子节点没有置位有效，也返回 PageFault
+                if pte & PTE_V == 0 {
+                    return TranslateResult::PageFault;
+                }
+
+                // 从 va 里面取 offset
+                // 需要注意从哪一层取出的地址，因为 offset 的长度不一样
+
+                let offset = va & ((1 << (12) + level * 9) - 1);
+                // 还原物理地址，因为是之前经过低位字节对齐，又转换成内部pte条目
+                // 所以需要做逆操作，从pte还原后再将二进制位拉高
+                let pa_base = (pte >> PPN_SHIFT) << 12;
+                println!(
+                    "read 0x{:x} from {}[{}], offset(from va): 0x{:x}, pa_base: 0x{:x}",
+                    pte, current_ppn, vpn, offset, pa_base
+                );
+                return TranslateResult::Ok(pa_base + offset);
+            } else {
+                if pte & PTE_V == 0 {
+                    return TranslateResult::PageFault;
+                }
+                current_ppn = pte >> PPN_SHIFT;
+                println!("current_ppn: {}", current_ppn);
+            }
+        }
+        TranslateResult::PageFault
     }
 
     /// 建立大页映射（2MB superpage，在 level 1 设叶子 PTE）。
@@ -150,7 +318,7 @@ impl Sv39PageTable {
     ///
     /// 与 map_page 类似，但只遍历到 level 1 就写入叶子 PTE。
     pub fn map_superpage(&mut self, va: u64, pa: u64, flags: u64) {
-        let mega_size: u64 = (PAGE_SIZE * PT_ENTRIES) as u64; // 2MB
+        let mega_size: u64 = (PAGE_SIZE * PT_ENTRIES) as u64; // 4KB * 512 = 2MB
         assert_eq!(va % mega_size, 0, "va must be 2MB-aligned");
         assert_eq!(pa % mega_size, 0, "pa must be 2MB-aligned");
 
@@ -160,7 +328,29 @@ impl Sv39PageTable {
         // 你需要在 level 2 找到或创建中间页表节点，然后在 level 1 写入叶子 PTE。
         // 注意大页的物理页号计算方式与普通页相同（pa >> 12），
         // 但翻译时 offset 包含虚拟地址的低 21 位（VPN[0] 部分 + 12 位页内偏移）。
-        todo!()
+        // todo!()
+
+        // 大页映射实际上是把 lv0 和 offset 融合到一块了，变成这样的结构
+        // 38     30 29     21 20                  0
+        // 000000000 000000000 000000000000000000000
+        // level2    level1    offset
+
+        let vpn_v2 = Self::extract_vpn(va, 2);
+        let node_v2 = self.nodes.get_mut(&self.root_ppn).unwrap();
+        // ptr_to_v1 是指向一级页表的指针
+        let ptr_to_v1 = {
+            let mut pte = node_v2.entries[vpn_v2];
+            if pte & PTE_V == 0 {
+                node_v2.entries[vpn_v2] = (self.next_ppn << PPN_SHIFT) | PTE_V;
+                self.alloc_node();
+                pte = self.next_ppn - 1;
+            }
+            pte
+        };
+
+        let vpn_v1 = Self::extract_vpn(va, 1);
+        let node_v1 = self.nodes.get_mut(&ptr_to_v1).unwrap();
+        node_v1.entries[vpn_v1] = ((pa >> 12) << PPN_SHIFT) | flags;
     }
 }
 
